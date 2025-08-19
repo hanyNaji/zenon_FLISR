@@ -740,7 +740,8 @@ for idx, row in tqdm(output_df_1.iterrows(), total=output_df_1.shape[0], desc="P
         output_df_1.at[idx, f"ISO{i+1}"] = smart_var if smart_var else "-"
         
         if "FDR" in smart_var_id:
-            eq_num = map_id_to_FeederNo(picture, smart_var_id)
+            FeederNo = map_id_to_FeederNo(picture, smart_var_id)
+            eq_num = FeederNo if FeederNo != "-" else smart_var_id
             # print(f"ISO FDR for machine {machine_id}: {eq_num}")
         else:
             eq_num = map_id_to_visualname(picture, smart_var_id)

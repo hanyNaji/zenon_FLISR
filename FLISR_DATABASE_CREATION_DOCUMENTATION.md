@@ -38,7 +38,7 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
 
 ## Scripts Overview
 
-### 1. name_var.py - Machine Name and Variable Extractor
+### 1. Extract_data_ALC.py - Machine Name and Variable Extractor
 **Purpose**: Extract machine names and associated variables from XML SCADA data
 
 **Input**: 
@@ -60,7 +60,7 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
 4. Find variable associations through graph traversal
 5. Generate clean machine name database
 
-### 2. Extract_var.py - Screen Variable and Smart Flag Extractor  
+### 2. Extract_data_SCREENS.py - Screen Variable and Smart Flag Extractor  
 **Purpose**: Extract screen variables and determine SMART equipment flags from screen definitions
 
 **Input**: 
@@ -83,7 +83,7 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
 4. Build lookup table for machine properties
 5. Merge with name_var data to create comprehensive machine database
 
-### 3. Alc_Machines_Iso.py - Machine Connection and Isolation Analysis
+### 3. Alc_Machines_loc_Iso.py - Machine Connection and Isolation Analysis
 **Purpose**: Build machine-to-machine connections and isolation equipment paths
 
 **Input**: 
@@ -138,7 +138,7 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
 6. Generate path summaries with end reasons
 7. Assign feeder information to machine database
 
-### 5. machine_machines_V3.py - Final Database Formatting
+### 5. Machine_data_flisr.py - Final Database Formatting
 **Purpose**: Format final FLISR database with project-specific configurations
 
 **Input**: 
