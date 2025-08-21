@@ -1,4 +1,4 @@
-# FLISR Database Creation Project Documentation
+# FLISR Database Creation Project
 
 ## Project Overview
 
