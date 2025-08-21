@@ -8,7 +8,7 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   name_var.py   │    │ Extract_var.py  │    │Alc_Machines_Iso.│
+│   Extract_data_ALC.py   │    │ Extract_data_SCREENS.py  │    │Alc_Machines_Iso.│
 │   (Script 1)    │    │   (Script 2)    │    │    py (Script 3)│
 │                 │    │                 │    │                 │
 │ Extract machine │    │ Extract screen  │    │ Build machine   │
@@ -28,7 +28,7 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
                 └─────────────────┬─────────────────┘
                                  │
                 ┌─────────────────▼─────────────────┐
-                │     machine_machines_V3.py       │
+                │     Machine_data_flisr.py       │
                 │            (Script 5)            │
                 │                                   │
                 │   Final database formatting &    │
@@ -81,7 +81,7 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
 2. Extract visual names and substitute destinations
 3. Match with smart_symbol_names set to determine SMART flag
 4. Build lookup table for machine properties
-5. Merge with name_var data to create comprehensive machine database
+5. Merge with Extract_data_ALC data to create comprehensive machine database
 
 ### 3. Alc_Machines_loc_Iso.py - Machine Connection and Isolation Analysis
 **Purpose**: Build machine-to-machine connections and isolation equipment paths
@@ -185,19 +185,19 @@ XML SCADA Data → Machine Names → Screen Variables → Connections → Networ
 
 ### File Paths (Update These)
 ```python
-# Script 1 - name_var.py
+# Script 1 - Extract_data_ALC.py
 input_file = r"C:\Users\USER\DAWADMI_RUWAYDAH\RT\FILES\zenon\system\alc.XML"
 
-# Script 2 - Extract_var.py  
+# Script 2 - Extract_data_SCREENS.py  
 xml_file = r"D:\Line follower\DWD\RUW_SCR.XML"
 
-# Script 3 - Alc_Machines_Iso.py
+# Script 3 - Alc_Machines_loc_Iso.py
 input_file_1 = r"C:\Users\USER\DAWADMI_RUWAYDAH\RT\FILES\zenon\system\alc.XML"
 
 # Script 4 - assign_feeder_to_machines.py
 xml_file = r"C:\Users\USER\DAWADMI_RUWAYDAH\RT\FILES\zenon\system\alc.XML"
 
-# Script 5 - machine_machines_V3.py
+# Script 5 - Machine_data_flisr.py
 project_name = "DAWADMI_RUWAYDAH#"
 Administration = "DWD"
 office_name = "RUW"
@@ -228,11 +228,11 @@ specialPrefixes = set([
 
 ## Execution Sequence
 
-1. **Run name_var.py**: Extract machine names and variables
-2. **Run Extract_var.py**: Extract screen variables and SMART flags
-3. **Run Alc_Machines_Iso.py**: Build connections and isolation paths
+1. **Run Extract_data_ALC.py**: Extract machine names and variables
+2. **Run Extract_data_SCREENS.py**: Extract screen variables and SMART flags
+3. **Run Alc_Machines_loc_Iso.py**: Build connections and isolation paths
 4. **Run assign_feeder_to_machines.py**: Perform network traversal and feeder assignment
-5. **Run machine_machines_V3.py**: Generate final FLISR database
+5. **Run Machine_data_flisr.py**: Generate final FLISR database
 
 ## Output Files
 
@@ -312,9 +312,9 @@ This project is designed for electrical utility SCADA system analysis and FLISR 
 | Script                        | Output Files                                    | Description                                                      |
 |-------------------------------|-------------------------------------------------|------------------------------------------------------------------|
 | assign_feeder_to_machines_V1.py | feeder_nop_paths_summary.xlsx,<br>alc_DB_FLIS_with_feeder.xlsx,<br>all_last_machines.xlsx | Feeder path summary, full DB with feeder info, all last machines |
-| Alc_Machines_Iso.py           | alc_DB_FLIS.xlsx,<br>machine_connections_alone.xlsx,<br>machine_connections_iso.xlsx | Main machine DB, direct connections, isolation connections       |
-| machine_machines_V3.py        | NOB_TRF_DB_FLISR.xlsx (or similar)              | Final restoration-ready DB                                       |
-| name_var.py                   | alc_machine_var.xlsx                            | Machine variable lookup table                                    |
-| Extract_var.py                | scr_machine_var.xlsx                            | Screen/project variable table                                    |
+| Alc_Machines_loc_Iso.py           | alc_DB_FLIS.xlsx,<br>machine_connections_alone.xlsx,<br>machine_connections_iso.xlsx | Main machine DB, direct connections, isolation connections       |
+| Machine_data_flisr.py        | NOB_TRF_DB_FLISR.xlsx (or similar)              | Final restoration-ready DB                                       |
+| Extract_data_ALC.py                   | alc_machine_var.xlsx                            | Machine variable lookup table                                    |
+| Extract_data_SCREENS.py                | scr_machine_var.xlsx                            | Screen/project variable table                                    |
 
 
