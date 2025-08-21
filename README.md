@@ -7,33 +7,33 @@ The **FLISR (Fault Location, Isolation, and Service Restoration) Database Creati
 ## Project Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Extract_data_ALC.py   │    │ Extract_data_SCREENS.py  │    │Alc_Machines_Iso.│
-│   (Script 1)    │    │   (Script 2)    │    │    py (Script 3)│
-│                 │    │                 │    │                 │
-│ Extract machine │    │ Extract screen  │    │ Build machine   │
-│ names & vars    │────│ variables &     │────│ connections &   │
-│ from XML        │    │ smart flags     │    │ isolation paths │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                ┌─────────────────▼─────────────────┐
-                │   assign_feeder_to_machines.py    │
-                │            (Script 4)             │
-                │                                   │
-                │    Network traversal & feeder     │
-                │    assignment using BFS algorithm │
-                └─────────────────┬─────────────────┘
-                                 │
-                ┌─────────────────▼─────────────────┐
-                │     Machine_data_flisr.py       │
-                │            (Script 5)            │
-                │                                   │
-                │   Final database formatting &    │
-                │   FLISR database generation      │
-                └───────────────────────────────────┘
+ ┌─────────────────────┐       ┌────────────────────────┐       ┌─────────────────────┐
+ │ Extract_data_ALC.py │       │ Extract_data_SCREENS.py│       │  Alc_Machines_Iso.  │
+ │     (Script 1)      │       │       (Script 2)       │       │    py (Script 3)    │
+ │                     │       │                        │       │                     │
+ │ Extract machine     │       │ Extract screen         │       │ Build machine       │
+ │ names & vars        │───────│ variables &            │───────│ connections &       │
+ │ from XML            │       │ smart flags            │       │ isolation paths     │
+ └─────────────────────┘       └────────────────────────┘       └─────────────────────┘
+          │                                │                                │
+          │                                │                                │
+          └────────────────────────────────┼────────────────────────────────┘
+                                           │
+                         ┌─────────────────▼─────────────────┐
+                         │   assign_feeder_to_machines.py    │
+                         │            (Script 4)             │
+                         │                                   │
+                         │    Network traversal & feeder     │
+                         │    assignment using BFS algorithm │
+                         └─────────────────┬─────────────────┘
+                                           │
+                         ┌─────────────────▼─────────────────┐
+                         │       Machine_data_flisr.py       │
+                         │            (Script 5)             │
+                         │                                   │
+                         │   Final database formatting &     │
+                         │   FLISR database generation       │
+                         └───────────────────────────────────┘
 ```
 
 ## Scripts Overview
