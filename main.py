@@ -3,22 +3,23 @@
 use_scr_xml = True
 
 ###############------ CHANGE THIS ------###############
-alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\ALKHARJ_DCC\SLD_ALHOOTA_OFFICE\RT\FILES\zenon\system\alc.XML"
-scr_xml_file = r"D:\chnge order\FLISR\KHARJ\SCREENS\HOT.XML"
+alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\HASA_REGIN_ZENON\VILLAGE_PROJECT_SLD_4\RT\FILES\zenon\system\alc.XML"
+scr_xml_file = r"D:\chnge order\FLISR\HASSA\SCREENS\HVS4.XML"
 output_folder = r"D:\Zenon py\Line follower\FLISR\outputs"
 
 # OUTPUT_FILE = r"D:\chnge order\FLISR\KHARJ\KHA_SUL_DB_FLISR.xlsx"
-PROJECT_NAME = "SLD_ALHOOTA_OFFICE#"
-ADMINISTRATION = "KHA"
-OFFICE_NAME = "HOT"
+PROJECT_NAME = "VILLAGE_PROJECT_SLD_4#"
+ADMINISTRATION = "HSA"
+OFFICE_NAME = "HVS"
+OFFICE_NO = "4"
 ###############------ CHANGE THIS ------###############
 
 # use scr_xml_file, ADMINISTRATION, OFFICE_NAME to define OUTPUT_FILE
-OUTPUT_FILE = r"{}\{}_{}_DB_FLISR.xlsx".format(scr_xml_file.split("\\")[0] + 
+OUTPUT_FILE = r"{}\{}_{}{}_DB_FLISR.xlsx".format(scr_xml_file.split("\\")[0] + 
                                                "\\" + scr_xml_file.split("\\")[1] + 
                                                "\\" + scr_xml_file.split("\\")[2] + 
                                                "\\" + scr_xml_file.split("\\")[3], 
-                                               ADMINISTRATION, OFFICE_NAME)
+                                               ADMINISTRATION, OFFICE_NAME, OFFICE_NO)
 print("Output file will be saved to:", OUTPUT_FILE)
 
 

@@ -178,36 +178,19 @@ def run(xml_file, output_folder, use_scr_xml):
         "CB"
     ]
 
+
+    feederPrefixes = set([
+        "INTEGRATION_PROJECT_SLD_FDR_DSS_1_DOWN_ALIAS",
+        "INTEGRATION_PROJECT_NON_SMART_CB_SLD"
+    ])
+
+
     import re
 
 
     ### ADD: variable check for the connection between nop machine and machine before it
 
-    def is_feeder(elem_id: str) -> bool:
-        """Check if the element is a feeder based on its name."""
-        name = get_machine_name(elem_id)
-        if name.startswith('INTEGRATION_PROJECT_SLD_FDR_DSS') or \
-           name.startswith('INTEGRATION_PROJECT_NON_SMART_CB'):
-            return True
-        return False
 
-    # Helper to get adjacent elements through shared nodes using 'connections'
-    def get_element_neighbors(elem_id: str, current_path=None):
-        """
-        Return only elements that are directly connected to elem_id via a shared node,
-        and not already in the current path (if provided).
-        This avoids cycles and indirect connections.
-        """
-        neigh_elements = set()
-        for nid in connections.get(elem_id, ()):  # nodes connected to this element
-            neigh_elements.add(nid) if nid not in current_path else None
-            for e2 in connections.get(nid, ()):   # elements connected to that node
-                if e2 != elem_id and e2 in all_elements:
-                    if current_path is None or e2 not in current_path:
-                        # if is_feeder(e2):
-                        #     return connections.get(elem_id, set())
-                        neigh_elements.add(e2)
-        return neigh_elements
 
 
 
@@ -262,6 +245,39 @@ def run(xml_file, output_folder, use_scr_xml):
         machine_name = get_machine_name(elem_id)
         legs = get_machine_legs(machine_name)
         return legs > 2
+    
+    
+    def is_feeder(elem_id):
+        name = get_machine_name(elem_id)
+        if any(name.startswith(prefix) for prefix in feederPrefixes):
+            return True
+        return False
+
+    # Helper to get adjacent elements through shared nodes using 'connections'
+    def get_element_neighbors(elem_id: str, current_path=None):
+        """
+        Return only elements that are directly connected to elem_id via a shared node,
+        and not already in the current path (if provided).
+        This avoids cycles and indirect connections.
+        """
+        neigh_elements = set()
+        for nid in connections.get(elem_id, ()):  # nodes connected to this element
+            nname = get_machine_name(nid)
+            fname = get_machine_name(path[0])
+            if is_feeder(nid) and nname != fname:
+                continue
+            for e2 in connections.get(nid, ()):   # elements connected to that node
+                e2_con = connections.get(e2, set())
+                # continue if any of e2_con is a feeder and not the first machine
+                if any(is_feeder(c) and get_machine_name(c) != fname for c in e2_con):
+                    continue
+                if is_feeder(e2) and nname != fname:
+                    continue
+                if e2 != elem_id and e2 in all_elements:
+                    if current_path is None or e2 not in current_path:
+                        neigh_elements.add(e2)
+        return neigh_elements
+
 
                 
     def add_path_to_summary(picture, feeder_key, path, nop_machine, end_reason, feeders, legs_traversed = 10):
@@ -356,7 +372,6 @@ def run(xml_file, output_folder, use_scr_xml):
 
     summary_rows = []
     last_machines_list = []
-    feeder_endpoints = {}
     # Add picture-level progress
     _pictures_items = list(picture_feeders.items())
     _total_pictures = len(_pictures_items)
@@ -368,7 +383,6 @@ def run(xml_file, output_folder, use_scr_xml):
         _total_feeders = len(_feeders_items)
         for _f_idx, (feeder_key, feeder_id) in enumerate(_feeders_items, 1):
             print(f"Feeder {_f_idx}/{_total_feeders}: {feeder_key} (ID: {feeder_id})")
-            feeder_endpoints[feeder_key] = set()  # Initialize endpoints for this feeder
             # Skip feeders whose key/name ends with _NOP
             if str(feeder_key).strip().upper().endswith('_NOP'):
                 print(f"  Skipping feeder '{feeder_key}' because it ends with _NOP")
@@ -388,11 +402,7 @@ def run(xml_file, output_folder, use_scr_xml):
                 current_machine_name = get_machine_name(current) or current
                 if visited_count[visit_key] >= 10 or current in NOP_END_POINTS:
                     continue
-
-                if current in feeder_endpoints[feeder_key]:
-                    # print(f"  Found feeder endpoint: {current_machine_name} for {feeder_key}")
-                    continue
-
+                
                 is_special_machine = any(current_machine_name.startswith(prefix) for prefix in specialPrefixes)
                 if is_special_machine and visited_count[visit_key] >= 1:
                     continue
@@ -403,15 +413,7 @@ def run(xml_file, output_folder, use_scr_xml):
                     element_ref_id = element_ref.split('.')[1] if '.' in element_ref else element_ref
                     variable = elem.find('Variable').text if elem.find('Variable') is not None else ""
                     # Check if current element is a feeder (but not the starting feeder)
-                    if ("INTEGRATION_PROJECT_SLD_FDR_DSS_1_DOWN_ALIAS" in element_ref_id or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in element_ref_id) and current != feeder_id:
-                        # print(f"  Found feeder endpoint: {current_machine_name} for {feeder_key}")
-                        feeder_endpoints[feeder_key].add(current)
-                        for neighbor in connections.get(current, set()):
-                            feeder_endpoints[feeder_key].add(neighbor)
-                            for neighbor2 in connections.get(neighbor, set()):
-                                feeder_endpoints[feeder_key].add(neighbor2)
-                                for neighbor3 in connections.get(neighbor2, set()):
-                                    feeder_endpoints[feeder_key].add(neighbor3)
+                    if (is_feeder(current) and current != feeder_id):
                         continue
                     # Handle NOP machines - enhanced for multi-leg NOPs
                     if 'NOP' in element_ref:
@@ -580,7 +582,7 @@ def run(xml_file, output_folder, use_scr_xml):
         feeder_id = row['Feeder']
         first_machine = row['First_Machine']
         last_machine = row['Last_Machine']
-        picture = row['Picture']
+        picture = str(row['Picture'])
         # Split path into machine IDs (use the same delimiter as in the summary)
         path_ids = [n.strip() for n in str(row['Path']).split('->') if n.strip()] if 'Path' in row else []
         for m_id in path_ids:
@@ -599,7 +601,7 @@ def run(xml_file, output_folder, use_scr_xml):
     for _, row in summary.iterrows():
         feeder_id = row['Feeder']
         last_machine = row['Last_Machine']
-        picture = row['Picture']
+        picture = str(row['Picture'])
         if last_machine and last_machine != '-':
             feeder_to_last_machines[(picture, feeder_id)].add(last_machine)
 
@@ -607,7 +609,7 @@ def run(xml_file, output_folder, use_scr_xml):
     for _, row in summary.iterrows():
         feeder_id = row['Feeder']
         first_machine = row['First_Machine']
-        picture = row['Picture']
+        picture = str(row['Picture'])
         # Split path into machine IDs (use the same delimiter as in the summary)
         path_ids = [n.strip() for n in str(row['Path']).split('->') if n.strip()] if 'Path' in row else []
         last_machines = ','.join(sorted(feeder_to_last_machines[(picture, feeder_id)]))

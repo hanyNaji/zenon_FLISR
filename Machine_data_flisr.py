@@ -33,7 +33,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
 
     # get feeder variables, Station, FeederNo using picture and feeder_id from var_df
     for idx, row in df2.iterrows():
-        picture = row['Picture']
+        picture = str(row['Picture'])
         feederID = row['feeder_id']
         # feederNO = row['FeederNo']
         if pd.isna(picture) or picture == "-":
@@ -89,7 +89,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
         #         df2.at[idx, 'FeederNo'] = matches_2['FeederNo'].values[0] 
     # # Additional matching: If picture and feederNo from df2 matches ScreenName and FeederNo from var_df
     # for idx, row in df2.iterrows():
-    #     picture = row['Picture']
+    #     picture = str(row['Picture'])
     #     feederNO = row['FeederNo']
     # 
     #     # Skip if essential data is missing
@@ -277,7 +277,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
         if "NOP" not in ID:
             continue
         con_machines = row['NOP'].split(",")
-        picture = row['Picture']
+        picture = str(row['Picture'])
         feeder = row['FeederNo']
 
         # Get feeder name of connected machines

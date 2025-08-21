@@ -449,21 +449,21 @@ def run(input_file_1, output_folder, use_scr_xml):
 
     # Replace Machine and Con1-Con14 if they match an ID in the mapping for the current Picture
     def map_id_to_subdest(picture, id_val):
-        return id_to_subdest.get((picture, str(id_val)), id_val)
+        return id_to_subdest.get((str(picture), str(id_val)), id_val)
 
     def map_id_to_smart(picture, id_val):
-        return id_to_smart.get((picture, str(id_val)), "-")
+        return id_to_smart.get((str(picture), str(id_val)), "-")
 
     def map_id_to_visualname(picture, id_val):
-        return id_to_visualname.get((picture, str(id_val)), "-")
+        return id_to_visualname.get((str(picture), str(id_val)), "-")
 
 
     def map_id_to_FeederNo(picture, id_val):
-        return id_to_FeederNo.get((picture, str(id_val)), "-")
+        return id_to_FeederNo.get((str(picture), str(id_val)), "-")
 
     # Apply mapping for each row
     def process_row(row):
-        picture = row["Picture"]
+        picture = str(row["Picture"])
         machine_id = row["Machine"]
         machine = map_id_to_subdest(picture, machine_id)
         smart = map_id_to_smart(picture, machine_id)
@@ -499,7 +499,7 @@ def run(input_file_1, output_folder, use_scr_xml):
     # Build mapping with (Picture, ID) as key
     connections_mapping = {}
     for _, row in machine_connections_df.iterrows():
-        key = (row["Picture"], str(row["ID"]))
+        key = (str(row["Picture"]), str(row["ID"]))
         if key not in connections_mapping:
             connections_mapping[key] = []
         for i in range(1, 15):
@@ -510,7 +510,7 @@ def run(input_file_1, output_folder, use_scr_xml):
     # Prepare the final output DataFrame
     final_output = []
     for _, row in tqdm(output_df.iterrows(), total=output_df.shape[0], desc="Processing connections"):
-        picture = row["Picture"]
+        picture = str(row["Picture"])
         if "EMERGENCY" in str(picture).upper() or "EMRGENCY" in str(picture).upper():
             continue
         machine = str(row["ID"])  # Use as "Machine" column
@@ -714,7 +714,7 @@ def run(input_file_1, output_folder, use_scr_xml):
 
     # Use all_connections as built previously
     for idx, row in tqdm(output_df_1.iterrows(), total=output_df_1.shape[0], desc="Processing Isolations"):
-        picture = row["Picture"]
+        picture = str(row["Picture"])
         machine_id = row["ID"]
         smart_ids = find_all_smart_machines_from(picture, machine_id, all_connections_id, is_smart)
         iso_nums = ""

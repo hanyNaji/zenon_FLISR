@@ -306,7 +306,7 @@ def run(input_alc_xml, output_folder):
             variable_base = variable.split("_Y", 1)[0]
         elif "#" in variable and "_TR_" in variable:  # SMART
             variable_base = variable.split("_TR_", 1)[0]
-        elif "#" in variable and "_Y" not in variable and "_TR_" not in variable and not "#ICCP_IND" in variable:  # FDR
+        elif "#" in variable and "_Y" not in variable and "_TR_" not in variable and not "#ICCP_IND" in variable and not "#ICCP_OC" in variable:  # FDR
             variable_base = variable.split("_OC_", 1)[0] if "_OC_" in variable else variable.split("_CB_", 1)[0]
         
         if variable_base == "-":
