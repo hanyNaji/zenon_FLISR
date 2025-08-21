@@ -317,7 +317,4 @@ This project is designed for electrical utility SCADA system analysis and FLISR 
 | name_var.py                   | alc_machine_var.xlsx                            | Machine variable lookup table                                    |
 | Extract_var.py                | scr_machine_var.xlsx                            | Screen/project variable table                                    |
 
-**Project Created**: 2025  
-**Last Updated**: July 29, 2025  
-**Version**: 5.0  
-**Author**: FLISR Database Creation Team
+
