@@ -1,26 +1,26 @@
+import ctypes
 # Main project runner for FLISR
 # Define all input/output paths here
 use_scr_xml = True
 
 ###############------ CHANGE THIS ------###############
-alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\HASA_REGIN_ZENON\VILLAGE_PROJECT_SLD_4\RT\FILES\zenon\system\alc.XML"
-scr_xml_file = r"D:\chnge order\FLISR\HASSA\SCREENS\HVS4.XML"
-output_folder = r"D:\Zenon py\Line follower\FLISR\outputs"
+alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\ARAR\SLD_RAFHA_OFFICE\RT\FILES\zenon\system\alc.XML"
+scr_xml_file = r"D:\chnge order\FLISR\ARAR\SCREENS\RAF.XML"
+output_folder = r"D:\Zenon py\Line follower\FLISR\outputs\4"
 
 # OUTPUT_FILE = r"D:\chnge order\FLISR\KHARJ\KHA_SUL_DB_FLISR.xlsx"
-PROJECT_NAME = "VILLAGE_PROJECT_SLD_4#"
-ADMINISTRATION = "HSA"
-OFFICE_NAME = "HVS"
-OFFICE_NO = "4"
+ADMINISTRATION = "NOB"
+OFFICE_NAME = "RAF"
+OFFICE_NO = ""
 ###############------ CHANGE THIS ------###############
 
+PROJECT_NAME = alc_xml_file.split("\\")[-6] + "#"
 # use scr_xml_file, ADMINISTRATION, OFFICE_NAME to define OUTPUT_FILE
 OUTPUT_FILE = r"{}\{}_{}{}_DB_FLISR.xlsx".format(scr_xml_file.split("\\")[0] + 
                                                "\\" + scr_xml_file.split("\\")[1] + 
                                                "\\" + scr_xml_file.split("\\")[2] + 
                                                "\\" + scr_xml_file.split("\\")[3], 
                                                ADMINISTRATION, OFFICE_NAME, OFFICE_NO)
-print("Output file will be saved to:", OUTPUT_FILE)
 
 
 def run_all():
@@ -40,3 +40,7 @@ def run_all():
 
 if __name__ == "__main__":
     run_all()
+
+
+    # Show a message box & sound alert
+    ctypes.windll.user32.MessageBoxW(0, f"FLISR processing complete...\n{PROJECT_NAME}", "Notification", 1)

@@ -15,6 +15,7 @@ def run(xml_file, output_folder, use_scr_xml):
     else:
         subdest_df = pd.read_excel(r"{}\alc_machine_var.xlsx".format(output_folder))
     machines = pd.read_excel(r"{}\alc_DB_FLIS.xlsx".format(output_folder))
+    alc_nodes_df = pd.read_excel(r"{}\alc_Consolidated_Var.xlsx".format(output_folder))
     output_file_1 = r"{}\feeder_nop_paths_summary.xlsx".format(output_folder)
     output_excel = r"{}\alc_DB_FLIS_with_feeder.xlsx".format(output_folder)
 
@@ -23,8 +24,13 @@ def run(xml_file, output_folder, use_scr_xml):
     print("="*40)
     
 
-    id_to_FeederNo = {}
+    id_to_NOP_Variables = {}
+    for _, row in machines.iterrows():
+        key = (row["Picture"], str(row["ID"]))
+        id_to_NOP_Variables[key] = row["NOP_Variables"]
 
+
+    id_to_FeederNo = {}
     for _, row in subdest_df.iterrows():
         if "FDR" not in row["ID"] and "INTEGRATION_PROJECT_NON_SMART_CB_SLD" not in row["ID"]:
             continue
@@ -181,7 +187,7 @@ def run(xml_file, output_folder, use_scr_xml):
 
     feederPrefixes = set([
         "INTEGRATION_PROJECT_SLD_FDR_DSS_1_DOWN_ALIAS",
-        "INTEGRATION_PROJECT_NON_SMART_CB_SLD"
+        # "INTEGRATION_PROJECT_NON_SMART_CB_SLD"
     ])
 
 
@@ -190,8 +196,71 @@ def run(xml_file, output_folder, use_scr_xml):
 
     ### ADD: variable check for the connection between nop machine and machine before it
 
+                    
+    # Helper: Find variable by traversing connections
+    def find_variable_stand_alone(element_id):
+        graph_element = elementid_to_graph_element.get(element_id)
+        if graph_element is None:
+            return None
+        element_ref = graph_element.find("ElementRef").text if graph_element.find("ElementRef") is not None else None
+        variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
+        parts_ = element_ref.split(".")
+
+        if any(parts_[1].startswith(prefix) for prefix in ignore_prefixes):
+            return None
+        if any(parts_[1].startswith(prefix) for prefix in specialPrefixes) and variable != "<No variable linked>":
+            return variable
+
+        if len(parts_) >3:
+            if parts_[2].startswith("INTEGRATION_PROJECT_ALC_ES") and parts_[3] == "DC" and variable != "<No variable linked>":
+                return variable
+        if len(parts_) >3:
+            if parts_[2].startswith("ALC_LBS") and variable != "<No variable linked>":
+                return variable
+        
+        visited = set()
+        stack = [element_id]
+        counter = 0
+        while stack: # and parts[1] not in ignore_prefixes
+            if counter > 50000:  # Prevent infinite loops
+                return None
+            counter += 1
+            current_id = stack.pop()
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            graph_element = elementid_to_graph_element.get(current_id)
+            if graph_element is None:
+                element_ref = "ID Not found"
+                continue
+            element_ref = graph_element.find("ElementRef").text if graph_element.find("ElementRef") is not None else None
+            variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
+            element_type = graph_element.find("Type").text if graph_element.find("Type") is not None else None
+            parts = element_ref.split(".")
+            
+            if element_ref and parts[1] == parts_[1]:
+                if any(parts[1].startswith(prefix) for prefix in specialPrefixes) and variable != "<No variable linked>":
+                    return variable
+                if len(parts) >3:
+                    if parts[2].startswith("ALC_LBS") and variable != "<No variable linked>":
+                        return variable
+                if element_type in ["2", "7"]:
+                    variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
+                    if variable != "<No variable linked>" and variable.endswith("OC_ST"):
+                        return variable
+            else:
+                continue
+            # Traverse further connections
+            next_node1_ids = [n.text for n in graph_element.findall(".//Node1IDs/ID")]
+            next_node2_ids = [n.text for n in graph_element.findall(".//Node2IDs/ID")]
+            stack.extend(next_node1_ids + next_node2_ids)
+        return None
 
 
+
+
+    # Rearrange alc_nodes_df (Picture, LineRefName, Node1 connections, Node2 connections) -> (Picture, Machine, con1, con2, con3, con4, con5, con6, con7)
+    # con = 
 
 
     def get_machine_name(elem_id):
@@ -279,7 +348,8 @@ def run(xml_file, output_folder, use_scr_xml):
         return neigh_elements
 
 
-                
+    LINES_RESTRICTED = set()
+    NOP_MACHINES_RESTRICTED = set()
     def add_path_to_summary(picture, feeder_key, path, nop_machine, end_reason, feeders, legs_traversed = 10):
         """Helper function to add a path to summary with proper processing"""
         path_names = []
@@ -290,23 +360,25 @@ def run(xml_file, output_folder, use_scr_xml):
 
         legs_traversed = int(path[-1]) if int(path[-1]) < 10 else legs_traversed
         path.remove(str(legs_traversed)) if str(legs_traversed) in path else None  # Remove legs traversed from path
-        
+
+        path_len = len(path)
         for i, pid in enumerate(path):
             name_unfiltered = get_machine_name(pid)
             name_filtered = get_machine_name_filtered(pid)
-            print(f"  DEBUG: Processing machine '{name_filtered}'") if name_filtered == "2L1T_4_1_2_1_1_15_1" else None
+            # print(f"  DEBUG: Processing machine '{name_filtered}'") if name_filtered == "2L1T_4_1_2_1_1_15_1" else None
             # Add ALL machines to the unfiltered list (no prefix filtering)
-            if name_unfiltered:
-                path_all_machines.append(name_unfiltered)
-                if name_unfiltered.startswith('Line'):
-                    last_conn = i + 1
+            if pid in LINES_RESTRICTED:
+                path_len = i
+                break
             else:
                 path_all_machines.append(pid[:20])
+            
             # Deduplication: always allow NOPs, filter others
             if name_filtered is not None:
+                if  (picture, name_filtered) in NOP_MACHINES_RESTRICTED:
+                    break
                 if name_filtered or ('_NOP' in name_filtered.upper()):
                     if name_filtered not in seen_names:
-                        print(f"  DEBUG: Adding machine to feeder '{name_filtered}'") if name_filtered == "2L1T_4_1_2_1_1_15_1" else None
                         path_names.append(name_filtered)
                         seen_names.add(name_filtered)
                         
@@ -314,16 +386,17 @@ def run(xml_file, output_folder, use_scr_xml):
 
         if not path_names:
             return False
-        last_machine = path_names[-1] if len(path_names) > 1 else None
-        if legs_traversed < 2:
-            # print(f"  DEBUG: Removing last machine '{last_machine}' from path due to legs traversed {legs_traversed}")
-            path_names = [n for n in path_names if n != last_machine]
+        last_machine = path_names[-1] if len(path_names) > 1 else None ###???
+
+        # if legs_traversed < 2:
+        #     # print(f"  DEBUG: Removing last machine '{last_machine}' from path due to legs traversed {legs_traversed}")
+        #     path_names = [n for n in path_names if n != last_machine]
         
         # Remove last machine if it appears less than 4 and more than 1 times in path_all_machines
-        if last_machine:
-            count_last = path_all_machines.count(last_machine)
-            if count_last < 4 and count_last > 1:
-                path_names = [n for n in path_names if n != last_machine]
+        # if last_machine:
+        #     count_last = path_all_machines.count(last_machine)
+        #     if count_last < 4 and count_last > 1:
+        #         path_names = [n for n in path_names if n != last_machine]
                 # print(f"  DEBUG: Removed last machine '{last_machine}' from path {path_str}") if legs_traversed < 10 else None
 
         # if last_conn and last_conn < len(path) and last_machine and "NOP" in last_machine:
@@ -338,8 +411,6 @@ def run(xml_file, output_folder, use_scr_xml):
         #             if valid_code:
         #                 print(f"  DEBUG: Found valid NOP legs {valid_code} in variable '{last_conn_variable}' for last machine '{last_machine}'")
         #                 path_names = [n for n in path_names if n != last_machine]
-
-        # path_all_machines.append(str(legs_traversed))
 
         path_str = ' -> '.join(path_names)
         path_all_machines_str = ' -> '.join(path_all_machines)  # ALL machines, no filtering
@@ -369,6 +440,8 @@ def run(xml_file, output_folder, use_scr_xml):
     # Track special prefix NOP machines to ensure they're only added to the first feeder
     special_nop_machines_assigned = set()
     NOP_END_POINTS = set()  # Track NOP end points to avoid revisiting
+    NOP_MACHINES_2LEG = {}
+    FEEDER_PATHS = {}
 
     summary_rows = []
     last_machines_list = []
@@ -389,17 +462,32 @@ def run(xml_file, output_folder, use_scr_xml):
                 continue
             visited = set()
             visited_count = defaultdict(int)  # Track visit count for each element
-            queue = deque([(feeder_id, [feeder_id], None)])  # (current_id, path, leg_context)
+            queue = deque([(feeder_id, [feeder_id], None, 0)])  # (current_id, path, leg_context)
             path_count = 0
             traversed_codes = {}
             dequeues = 0  # BFS progress counter
             while queue and path_count < 2000000:
-                current, path, leg_context = queue.popleft()
+                current, path, leg_context, current_path_count = queue.popleft()
                 dequeues += 1
                 if dequeues % PROGRESS_EVERY == 0:
                     print(f"    progress: {dequeues:,} dequeued, paths={path_count}, queue={len(queue):,}")
                 visit_key = (current, leg_context)
                 current_machine_name = get_machine_name(current) or current
+
+                # if (picture, feeder_id) in FEEDER_PATHS and FEEDER_PATHS[(picture, feeder_id)] == current_path_count:
+                #     print("Unvalid path DETECTED: ", current_machine_name)
+                #     continue
+
+                # if current in NOP_END_POINTS:
+                #     current_machine_name = get_machine_name(current) or current
+                #     end_reason = f"NOP_END_AT_{current_machine_name[:30]}"
+                #     if add_path_to_summary(picture, feeder_key, path, current_machine_name, end_reason, feeders):
+                #         path_count += 1
+                #         name = get_machine_name_filtered(current)
+                #         if name != None:
+                #             last_machines_list.append(name)
+                #     continue
+
                 if visited_count[visit_key] >= 10 or current in NOP_END_POINTS:
                     continue
                 
@@ -412,9 +500,12 @@ def run(xml_file, output_folder, use_scr_xml):
                     element_ref = elem.find('ElementRef').text if elem.find('ElementRef') is not None else ""
                     element_ref_id = element_ref.split('.')[1] if '.' in element_ref else element_ref
                     variable = elem.find('Variable').text if elem.find('Variable') is not None else ""
-                    # Check if current element is a feeder (but not the starting feeder)
-                    if (is_feeder(current) and current != feeder_id):
-                        continue
+
+                    # # Check if current element is a feeder (but not the starting feeder) -> skip path (delete whole path)
+                    # if (is_feeder(current) and current != feeder_id):
+                    #     FEEDER_PATHS[(picture, feeder_id)] = current_path_count
+                    #     continue
+
                     # Handle NOP machines - enhanced for multi-leg NOPs
                     if 'NOP' in element_ref:
                         current_machine_name = get_machine_name(current) or current
@@ -426,7 +517,7 @@ def run(xml_file, output_folder, use_scr_xml):
                             for neighbor in connections.get(current, set()):
                                 NOP_END_POINTS.add(neighbor)
                             if current_machine_name in special_nop_machines_assigned:
-                                path = [p for p in path if p != current_machine_name]
+                                path = [p for p in path if get_machine_name(p) != current_machine_name]
                                 if add_path_to_summary(picture, feeder_key, path, current_machine_name, 'SPECIAL_MACHINE_ENDPOINT', feeders):
                                     path_count += 1
                                     name = get_machine_name_filtered(current)
@@ -449,6 +540,22 @@ def run(xml_file, output_folder, use_scr_xml):
                                 special_nop_machines_assigned.add(current_machine_name)
                             continue
                         else:
+                            if(id_to_NOP_Variables.get((picture, current_machine_name)) == "-"):
+                                NOP_MACHINES_RESTRICTED.add((picture, current_machine_name)) if (picture, current_machine_name) not in NOP_MACHINES_RESTRICTED else None
+                                # print("Found Listed NOP machine:", current_machine_name)
+                                nop_machine = get_machine_name(current) or current
+                                end_reason = "NOP_Y_MATCH"
+                                # path.append(str(1))
+                                # NOP_END_POINTS.add(current)
+                                # for neighbor in connections.get(current, set()):
+                                #     NOP_END_POINTS.add(neighbor)
+                                if add_path_to_summary(picture, feeder_key, path, nop_machine, end_reason, feeders):
+                                    path_count += 1
+                                    name = get_machine_name_filtered(current)
+                                    if name != None:
+                                        last_machines_list.append(name)
+                                continue
+                                
 
                             allYcodes = ["Y" + str(i) for i in range(1, 6)] # Y codes
                             allYcodes += ["Q" + str(i) for i in range(1, 3)] # Q codes
@@ -473,7 +580,7 @@ def run(xml_file, output_folder, use_scr_xml):
                                         TR_code_2T = "TR_RIGHT" if code == "T2" else "TR_LEFT"
                                         if q_code in variable:
                                             valid_code.append(code)
-                                        elif TR_code in variable:
+                                        elif TR_code and TR_code in variable:
                                             valid_code.append(code)
                                         elif TR_code_2T in variable:
                                             valid_code.append(code)
@@ -485,9 +592,60 @@ def run(xml_file, output_folder, use_scr_xml):
                                 # Remove duplicates
                                 traversed_codes[(picture, current_machine_name)] = list(set(traversed_codes[(picture, current_machine_name)]))
                                 if valid_code:
+
+                                    pass_flag = True
+                                    # get machine connection points from alc_nodes_df and check if connected to the nop leg
+                                    for idx, row in alc_nodes_df.iterrows():
+                                        if row["Picture"] != picture:
+                                            continue
+                                        node1_connections = str(row["Node1 connections"]).split(", ") if pd.notna(row["Node1 connections"]) else []
+                                        node2_connections = str(row["Node2 connections"]).split(", ") if pd.notna(row["Node2 connections"]) else []
+                                        for node in node1_connections + node2_connections:
+                                            element_name = node.split('>')[1]
+                                            if element_name == current_machine_name:
+                                                for id in path:
+                                                    if id == node.split('>')[0]:
+                                                        con_variable = find_variable_stand_alone(id)
+                                                        valid_code = []
+                                                        for code in nop_codes:
+                                                            if code.startswith('Y'):
+                                                                if code in con_variable:
+                                                                    valid_code.append(code)
+                                                            elif code.startswith('T'):
+                                                                q_code = '.Q' + code[1:]
+                                                                TR_code = 'TR' if code == "T1" and "1T" in element_ref_id else None
+                                                                TR_code_2T = "TR_RIGHT" if code == "T2" else "TR_LEFT"
+                                                                if q_code in con_variable:
+                                                                    valid_code.append(code)
+                                                                elif TR_code and TR_code in con_variable:
+                                                                    valid_code.append(code)
+                                                                elif TR_code_2T in con_variable:
+                                                                    valid_code.append(code)
+                                                        if valid_code:
+                                                            pass_flag = False
+                                                            NOP_END_POINTS.add(id)
+                                                            for neighbor in connections.get(id, set()):
+                                                                if get_machine_name(neighbor).startswith("Line"):
+                                                                    LINES_RESTRICTED.add(neighbor)
+                                                            ## remove current_machine_name from path
+                                                            path = [p for p in path if get_machine_name(p) != current_machine_name]
+                                                            # print(f"  DEBUG: Valid NOP legs {valid_code} found in connected machine '{get_machine_name(id)}' variable '{con_variable}' for NOP machine '{current_machine_name}'")
+                                                            nop_machine = get_machine_name(current) or current
+                                                            end_reason = "NOP_Y_MATCH_2"
+                                                            # path.append(str(len(traversed_codes)))
+                                                            if add_path_to_summary(picture, feeder_key, path, nop_machine, end_reason, feeders):
+                                                                path_count += 1
+                                                                name = get_machine_name_filtered(current)
+                                                                if name != None:
+                                                                    last_machines_list.append(name)
+                                                            break
+
+                                    if pass_flag == False:
+                                        continue
+
                                     nop_machine = get_machine_name(current) or current
                                     end_reason = "NOP_Y_MATCH"
-                                    path.append(str(len(traversed_codes)))
+                                    # path.append(str(len(traversed_codes)))
                                     if add_path_to_summary(picture, feeder_key, path, nop_machine, end_reason, feeders):
                                         path_count += 1
                                         name = get_machine_name_filtered(current)
@@ -495,29 +653,33 @@ def run(xml_file, output_folder, use_scr_xml):
                                             last_machines_list.append(name)
                                         # traversed_codes = []
                                     NOP_END_POINTS.add(current)
-                                    if is_multi_leg_machine(current):
+                                    
+                                    if is_multi_leg_machine(current) and pass_flag:
                                         for neighbor in connections.get(current, set()):
                                             NOP_END_POINTS.add(neighbor)
+                                            for neighbor2 in connections.get(neighbor, set()):
+                                                if get_machine_name(neighbor2) == current_machine_name:
+                                                    NOP_END_POINTS.add(neighbor2)
                                         pass
-                                    else:
+                                    elif not is_multi_leg_machine(current):
+                                        # print("Two legs NOP machine detected:", current_machine_name)
                                         for neighbor in connections.get(current, set()):
                                             if get_machine_name(neighbor) == current_machine_name:
                                                 NOP_END_POINTS.add(neighbor)
-                                                # if current_machine_name == "2L1T_4_1_2_1_1_15_NOP_Y2":
-                                                #     print("Adding neighbor:", neighbor)
-                                                #     print("For machine name:", get_machine_name(neighbor))
                                                 for neighbor2 in connections.get(neighbor, set()):
                                                     if get_machine_name(neighbor2) == current_machine_name:
                                                         NOP_END_POINTS.add(neighbor2)
-                                                        for neighbor3 in connections.get(neighbor2, set()):
-                                                            if get_machine_name(neighbor3) == current_machine_name:
-                                                                NOP_END_POINTS.add(neighbor3)
+                                        #                 for neighbor3 in connections.get(neighbor2, set()):
+                                        #                     if get_machine_name(neighbor3) == current_machine_name:
+                                        #                         NOP_END_POINTS.add(neighbor3)
+
+                                        NOP_MACHINES_2LEG[(picture, current_machine_name)] = (picture, current_machine_name) if (picture, current_machine_name) not in NOP_MACHINES_2LEG else None
                                         continue
                             else:
                                 nop_machine = get_machine_name(current) or current
                 # Traverse neighbors for all machines - improved approach
-                # all_neighbors = connections.get(current, set())
-                all_neighbors = list(get_element_neighbors(current, path))
+                all_neighbors = connections.get(current, set())
+                # all_neighbors = list(get_element_neighbors(current, path))
                 # print(f"DEBUG: Current {current}, Path {path}, Neighbors {all_neighbors}")
                 neighbors = [neighbor for neighbor in all_neighbors if visited_count[(neighbor, leg_context)] < 10]
                 if not neighbors and current != feeder_id:
@@ -531,7 +693,7 @@ def run(xml_file, output_folder, use_scr_xml):
                         # traversed_codes = []
                     continue
                 for neighbor in neighbors:
-                    queue.append((neighbor, path + [neighbor], leg_context))
+                    queue.append((neighbor, path + [neighbor], leg_context, path_count))
             if path_count == 0:
                 print("  No NOP end paths found from this feeder.")
             else:
@@ -541,14 +703,17 @@ def run(xml_file, output_folder, use_scr_xml):
     if summary_rows:
         df = pd.DataFrame(summary_rows)
         df.drop_duplicates(subset=["Picture", "Feeder", "First_Machine", "Last_Machine", "Machine_Count"], inplace=True)
+
         # Remove paths with less than 1 machine names
         df = df[df['Path'].apply(lambda x: len([n for n in x.split('->') if n.strip()]) >= 1)]
         # Remove sub-paths
         to_remove = set()
         paths = df['Path'].tolist()
+        picture = df['Picture'].tolist()
+
         for i, path_i in enumerate(paths):
             for j, path_j in enumerate(paths):
-                if i != j and path_i and path_j and path_i in path_j:
+                if i != j and path_i and path_j and path_i in path_j and picture[i] == picture[j]:
                     if len(path_i) < len(path_j):
                         to_remove.add(i)
         if to_remove:
@@ -576,25 +741,6 @@ def run(xml_file, output_folder, use_scr_xml):
     print("Assign Feeder Info to Machines Script")
     print("="*40)
 
-    # Prepare mapping: (Picture, machine ID) -> (feeder_id, first machine, last machine)
-    machine_to_feeder = {}
-    for _, row in summary.iterrows():
-        feeder_id = row['Feeder']
-        first_machine = row['First_Machine']
-        last_machine = row['Last_Machine']
-        picture = str(row['Picture'])
-        # Split path into machine IDs (use the same delimiter as in the summary)
-        path_ids = [n.strip() for n in str(row['Path']).split('->') if n.strip()] if 'Path' in row else []
-        for m_id in path_ids:
-            machine_to_feeder[(picture, m_id)] = (feeder_id, first_machine, last_machine)
-
-    # Assign feeder info to each machine in DB using (Picture, machine) as key
-    feeder_ids = []
-    first_machines = []
-    last_machines = []
-
-    _total_rows = len(machines)
-    assigned_count = 0
 
     # Prepare mapping: (Picture, machine ID) -> (feeder_id, first machine, last machines)
     feeder_to_last_machines = defaultdict(set)
@@ -614,12 +760,14 @@ def run(xml_file, output_folder, use_scr_xml):
         path_ids = [n.strip() for n in str(row['Path']).split('->') if n.strip()] if 'Path' in row else []
         last_machines = ','.join(sorted(feeder_to_last_machines[(picture, feeder_id)]))
         for m_id in path_ids:
-            machine_to_feeder[(picture, m_id)] = (feeder_id, first_machine, last_machines)
+            machine_ind = path_ids.index(m_id)
+            machine_to_feeder[(picture, m_id)] = (feeder_id, first_machine, last_machine, machine_ind)
 
     # Assign feeder info to each machine in DB using (Picture, machine) as key
     feeder_ids = []
     first_machines = []
     last_machines = []
+    machine_indices = []
 
     _total_rows = len(machines)
     assigned_count = 0
@@ -627,7 +775,7 @@ def run(xml_file, output_folder, use_scr_xml):
     for _idx, (_, row) in enumerate(machines.iterrows(), 1):
         picture = str(row['Picture'])
         machine_id = str(row['ID'])
-        feeder_info = machine_to_feeder.get((picture, machine_id), ('-', '-', '-'))
+        feeder_info = machine_to_feeder.get((picture, machine_id), ('-', '-', '-', 0))
         if feeder_info[0] != '-':
             assigned_count += 1
         if _idx % ASSIGN_PROGRESS_EVERY == 0:
@@ -635,10 +783,12 @@ def run(xml_file, output_folder, use_scr_xml):
         feeder_ids.append(feeder_info[0])
         first_machines.append(feeder_info[1])
         last_machines.append(feeder_info[2])  # Now this is a comma-separated list
+        machine_indices.append(feeder_info[3]) 
 
     machines['feeder_id'] = feeder_ids
     machines['first machine in feeder'] = first_machines
     machines['last machines in feeder'] = last_machines  # <-- updated column name
+    machines['Equipment Index'] = machine_indices
 
     print(f"Assigned feeder info to {assigned_count}/{_total_rows} machines.")
 

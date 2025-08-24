@@ -398,6 +398,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
                 "Feeder Name",
                 "Feeder OCT Variable",
                 "Feeder CMD Variable",
+                "Equipment Index",
                 "Equipment ID",
                 "Equipment Number",
                 "Functional Location",
