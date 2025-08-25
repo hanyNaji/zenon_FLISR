@@ -1,6 +1,8 @@
 import pandas as pd
 from thefuzz import process
 from tqdm import tqdm  # Import tqdm for progress visualization
+import numpy as np
+import ast
 import re
 
 
@@ -13,6 +15,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
     # Load your files
     file2 = r"{}\alc_DB_FLIS_with_feeder.xlsx".format(output_folder)
 
+    print()
     print("="*40)
     print("  Extracting Machine Restoration and Finishing up")
     print("="*40)
@@ -189,6 +192,121 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
         df2.at[idx, "Restoration CMD Variables"] = row['Feeder CMD Variable']
 
 
+    def _to_list(val):
+        """Normalize isolation vars into a list of strings."""
+        if pd.isna(val):
+            return []
+        if isinstance(val, (list, tuple, set)):
+            return [str(x).strip() for x in val if str(x).strip()]
+        s = str(val).strip()
+        if not s or s == "-":
+            return []
+        # If Excel reloaded a Python-list-as-string like "['A','B']"
+        if s.startswith('[') and s.endswith(']'):
+            try:
+                parsed = ast.literal_eval(s)
+                if isinstance(parsed, (list, tuple, set)):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except Exception:
+                pass
+        # Comma-separated string
+        return [t for t in (x.strip() for x in s.split(',')) if t]
+
+    ###### Isolation fix for smart machines ######
+    """
+        Processes only rows with SMART == "SMART".
+        If machine is in last machines in feeder, or Equipment Index invalid, or no next machine found → set both isolation fields to "-" and skip.
+        “Next machines” = same Picture, same feeder_id, and Equipment Index = current + 1; also must be in Location Equipments IDs.
+        Normalizes isolation fields to lists via _to_list(...) for both current and next rows.
+        For SMART next machines:
+        If machine_vname appears in next’s vars → append the matching nxt_oct[i]/nxt_cmd[i].
+        If nxt_vname appears in current vars → append the matching cur_oct[i]/cur_cmd[i].
+        For non-SMART next machines: append all of their nxt_oct/nxt_cmd.
+        Skips candidates with empty nxt_oct.
+        Writes back only if something was collected; values are comma-joined, empties dropped, no dedup.
+    """
+    for idx, row in df2.iterrows():
+        picture = str(row['Picture'])
+        machine_id = str(row['ID'])
+        machine_vname = str(row['VisualName'])
+        machine_type = str(row['SMART'])
+        machine_index = row.get('Equipment Index', np.nan)
+        feeder_id = row.get('feeder_id', '-')
+
+        # Skip non-SMART rows early
+        if machine_type != "SMART":
+            continue
+
+        # If this machine is one of the last in its feeder -> set "-" and move on
+        last_in_feeder = _to_list(row['last machines in feeder'])
+        if machine_id in last_in_feeder:
+            df2.at[idx, "Isolation OCT Variables"] = "-"
+            df2.at[idx, "Isolation CMD Variables"] = "-"
+            continue
+
+        # Need a valid numeric Equipment Index to search for the "next" machine
+        try:
+            next_index = int(machine_index) + 1
+        except (TypeError, ValueError):
+            df2.at[idx, "Isolation OCT Variables"] = "-"
+            df2.at[idx, "Isolation CMD Variables"] = "-"
+            continue
+
+        # Find the next machine within same Picture and feeder_id
+        candidates = df2[
+            (df2['Picture'].astype(str) == picture) &
+            (df2['feeder_id'].astype(str) == str(feeder_id)) &
+            (df2['Equipment Index'] == next_index)
+        ]
+
+        if candidates.empty:
+            # No next machine found
+            df2.at[idx, "Isolation OCT Variables"] = "-"
+            df2.at[idx, "Isolation CMD Variables"] = "-"
+            continue
+        
+        loc_ids = _to_list(row['Location Equipments IDs'])
+
+        # Collect results from all matching next machines
+        oct_vals, cmd_vals = [], []
+
+        # Current machine variables (always normalized to list)
+        cur_oct = _to_list(row.get("Isolation OCT Variables"))
+        cur_cmd = _to_list(row.get("Isolation CMD Variables"))
+
+        for _, nxt in candidates.iterrows():
+            nxt_id = str(nxt.get('ID', ''))
+            nxt_vname = str(nxt.get('VisualName', ''))
+
+            if nxt_id not in loc_ids:
+                continue
+
+            nxt_oct = _to_list(nxt.get("Isolation OCT Variables", []))
+            nxt_cmd = _to_list(nxt.get("Isolation CMD Variables", []))
+            
+            if not nxt_oct or nxt_oct == "-":
+                continue
+
+            if str(nxt.get('SMART', '')) == "SMART":
+                # Cross-check using VisualName
+                for i, var in enumerate(nxt_oct):
+                    if machine_vname in var:
+                        oct_vals.extend([nxt_oct[i]])
+                        cmd_vals.extend([nxt_cmd[i]])
+                for i, var in enumerate(cur_oct):
+                    if nxt_vname in var:
+                        oct_vals.extend([cur_oct[i]])
+                        cmd_vals.extend([cur_cmd[i]])
+            else:
+                # Non-SMART → inherit directly
+                oct_vals.extend(nxt_oct if nxt_oct else None)
+                cmd_vals.extend(nxt_cmd if nxt_cmd else None)
+
+        if oct_vals or cmd_vals:
+            # Join as comma-separated string, drop empties
+            df2.at[idx, "Isolation OCT Variables"] = ",".join([v for v in oct_vals if v]) if oct_vals else "-"
+            df2.at[idx, "Isolation CMD Variables"] = ",".join([v for v in cmd_vals if v]) if cmd_vals else "-"
+
     ############################ Restoration ###########################
 
     for picture, picture_group in tqdm(df2.groupby("Picture"), total=df2['Picture'].nunique(), desc="Finishing up 2/2"):
@@ -207,7 +325,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
                 # Combine for later matching
                 NOP_codes = NOP_Ys + NOP_Ts
 
-                con_machines = [x for x in row['Location Equipments IDs'].split(",") if x.strip()] if pd.notna(row['Location Equipments IDs']) else []
+                con_machines = [x for x in row['Location Equipments IDs'].split(",")] if pd.notna(row['Location Equipments IDs']) else []
                 nop_vars_cmd = []
                 nop_vars_oct = row['NOP_Variables'].split(",") if pd.notna(row['NOP_Variables']) else []
                 # Join and assign nop_vars_oct and replace OC_ST with OC_CMD
@@ -232,7 +350,6 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
                 connected_feeders = []
                 connected_feeders.append(feeder)
                 for con_machine in con_machines:
-                    # con_machine = con_machine.strip()
                     if con_machine in df2['ID'].values:
                         feeder_id = df2.loc[(df2['Picture'] == picture) & (df2['ID'] == con_machine), 'feeder_id'].values[0]
                         if feeder_id not in connected_feeders and feeder_id != "-":
@@ -276,7 +393,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
         ID = row['ID']
         if "NOP" not in ID:
             continue
-        con_machines = [x for x in row['Location Equipments IDs'].split(",") if x.strip()] if pd.notna(row['Location Equipments IDs']) else []
+        con_machines = [x for x in row['Location Equipments IDs'].split(",")] if pd.notna(row['Location Equipments IDs']) else []
         picture = str(row['Picture'])
         feeder = row['FeederNo']
 

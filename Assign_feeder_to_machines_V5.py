@@ -19,6 +19,7 @@ def run(xml_file, output_folder, use_scr_xml):
     output_file_1 = r"{}\feeder_nop_paths_summary.xlsx".format(output_folder)
     output_excel = r"{}\alc_DB_FLIS_with_feeder.xlsx".format(output_folder)
 
+    print()
     print("="*40)
     print("  Network Traversal Debug Script")
     print("="*40)
@@ -32,8 +33,6 @@ def run(xml_file, output_folder, use_scr_xml):
 
     id_to_FeederNo = {}
     for _, row in subdest_df.iterrows():
-        if "FDR" not in row["ID"] and "INTEGRATION_PROJECT_NON_SMART_CB_SLD" not in row["ID"]:
-            continue
         key = (row["ScreenName"], str(row["ID"]))
         id_to_FeederNo[key] = row["FeederNo"]
 
@@ -89,6 +88,75 @@ def run(xml_file, output_folder, use_scr_xml):
 
     print(f"\nFound {len(picture_groups)} unique pictures.")
 
+    ###################
+
+    
+    feederPrefixes = set([
+        "INTEGRATION_PROJECT_SLD_FDR_DSS_1_DOWN_ALIAS",
+        # "INTEGRATION_PROJECT_NON_SMART_CB_SLD"
+    ])
+    
+    def get_machine_name(elem_id):
+        elem = all_elements[elem_id] if elem_id in all_elements else None
+        if elem is None:
+            return elem_id  # Return ID if element not found
+        element_ref = elem.find('ElementRef').text if elem.find('ElementRef') is not None else elem_id
+        # Use second part after splitting by dot, if available
+        parts = element_ref.split('.')
+        name = parts[1] if len(parts) > 1 else element_ref
+        return name
+
+    def get_machine_name_filtered(elem_id):
+        name = get_machine_name(elem_id)
+        # Only filter out ignored prefixes at the end, but allow NOPs
+        if '_NOP' in name.upper():
+            return name
+        for prefix in ignore_prefixes:
+            if name.startswith(prefix):
+                return None
+        return name
+
+    def is_valid_machine(elem_id):
+        name = get_machine_name(elem_id)
+        # Always allow NOPs as valid endpoints
+        if '_NOP' in name.upper():
+            return name
+        for prefix in ignore_prefixes:
+            if name.startswith(prefix):
+                return False
+        return name
+
+    def get_machine_legs(machine_name):
+        """Extract the number of legs for a machine based on its num before L in its name (2L, 3L, etc.) at the start."""
+        if not machine_name:
+            return []
+        # Look for L pattern in the machine name and get number before L
+        # e.g. L2, L3, etc.
+        if machine_name.startswith('2L'):
+            return 2
+        elif machine_name.startswith('3L'):
+            return 3
+        elif machine_name.startswith('4L'):
+            return 4
+        elif machine_name.startswith('5L'):
+            return 5
+        return 2
+
+    def is_multi_leg_machine(elem_id):
+        """Check if a machine has more than 2 legs"""
+        machine_name = get_machine_name(elem_id)
+        legs = get_machine_legs(machine_name)
+        return legs > 2
+    
+    
+    def is_feeder(elem_id):
+        name = get_machine_name(elem_id)
+        if any(name.startswith(prefix) for prefix in feederPrefixes):
+            return True
+        return False
+
+    ###################
+
     # For each picture, find unique feeders (FDR in ElementRef, use second part as key)
     picture_feeders = {}
     for picture, elems in picture_groups.items():
@@ -97,7 +165,7 @@ def run(xml_file, output_folder, use_scr_xml):
             elem_id = elem.find('ID').text
             elem_type = int(elem.find('Type').text)
             element_ref = elem.find('ElementRef').text if elem.find('ElementRef') is not None else ""
-            if "INTEGRATION_PROJECT_SLD_FDR_DSS_1_DOWN_ALIAS" in element_ref or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in element_ref:
+            if is_feeder(elem_id):
                 parts = element_ref.split('.')
                 feeder_key = parts[1] if len(parts) > 1 else elem_id
                 feeders[feeder_key] = elem_id
@@ -185,18 +253,12 @@ def run(xml_file, output_folder, use_scr_xml):
     ]
 
 
-    feederPrefixes = set([
-        "INTEGRATION_PROJECT_SLD_FDR_DSS_1_DOWN_ALIAS",
-        # "INTEGRATION_PROJECT_NON_SMART_CB_SLD"
-    ])
-
 
     import re
 
 
     ### ADD: variable check for the connection between nop machine and machine before it
-
-                    
+       
     # Helper: Find variable by traversing connections
     def find_variable_stand_alone(element_id):
         graph_element = elementid_to_graph_element.get(element_id)
@@ -256,71 +318,6 @@ def run(xml_file, output_folder, use_scr_xml):
             stack.extend(next_node1_ids + next_node2_ids)
         return None
 
-
-
-
-    # Rearrange alc_nodes_df (Picture, LineRefName, Node1 connections, Node2 connections) -> (Picture, Machine, con1, con2, con3, con4, con5, con6, con7)
-    # con = 
-
-
-    def get_machine_name(elem_id):
-        elem = all_elements[elem_id] if elem_id in all_elements else None
-        if elem is None:
-            return elem_id  # Return ID if element not found
-        element_ref = elem.find('ElementRef').text if elem.find('ElementRef') is not None else elem_id
-        # Use second part after splitting by dot, if available
-        parts = element_ref.split('.')
-        name = parts[1] if len(parts) > 1 else element_ref
-        return name
-
-    def get_machine_name_filtered(elem_id):
-        name = get_machine_name(elem_id)
-        # Only filter out ignored prefixes at the end, but allow NOPs
-        if '_NOP' in name.upper():
-            return name
-        for prefix in ignore_prefixes:
-            if name.startswith(prefix):
-                return None
-        return name
-
-    def is_valid_machine(elem_id):
-        name = get_machine_name(elem_id)
-        # Always allow NOPs as valid endpoints
-        if '_NOP' in name.upper():
-            return name
-        for prefix in ignore_prefixes:
-            if name.startswith(prefix):
-                return False
-        return name
-
-    def get_machine_legs(machine_name):
-        """Extract the number of legs for a machine based on its num before L in its name (2L, 3L, etc.) at the start."""
-        if not machine_name:
-            return []
-        # Look for L pattern in the machine name and get number before L
-        # e.g. L2, L3, etc.
-        if machine_name.startswith('2L'):
-            return 2
-        elif machine_name.startswith('3L'):
-            return 3
-        elif machine_name.startswith('4L'):
-            return 4
-        elif machine_name.startswith('5L'):
-            return 5
-        return 2
-
-    def is_multi_leg_machine(elem_id):
-        """Check if a machine has more than 2 legs"""
-        machine_name = get_machine_name(elem_id)
-        legs = get_machine_legs(machine_name)
-        return legs > 2
-    
-    
-    def is_feeder(elem_id):
-        name = get_machine_name(elem_id)
-        if any(name.startswith(prefix) for prefix in feederPrefixes):
-            return True
-        return False
 
     # Helper to get adjacent elements through shared nodes using 'connections'
     def get_element_neighbors(elem_id: str, current_path=None):
@@ -806,7 +803,7 @@ def run(xml_file, output_folder, use_scr_xml):
             iso_equip = str(row.get('Isolation Equipments Numbers', ''))
             if not iso_equip or feeder_id == '-' or iso_equip == '-':
                 continue
-            visual_names = [v.strip() for v in iso_equip.split(',') if v.strip()]
+            visual_names = [v for v in iso_equip.split(',') if v.strip()]
             iso_num = len(visual_names)
             # Get feeder assignments for all machines
             valid_visuals = []
@@ -843,7 +840,7 @@ def run(xml_file, output_folder, use_scr_xml):
             loc_equip = str(row.get('Location Equipments IDs', ''))
             if not loc_equip or feeder_id == '-' or loc_equip == '-':
                 continue
-            loc_ids = [v.strip() for v in loc_equip.split(',') if v.strip()]
+            loc_ids = [v for v in loc_equip.split(',') if v.strip()]
             loc_num = len(loc_ids)
             # Get feeder assignments for all machines
             valid_ids = []

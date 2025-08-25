@@ -193,7 +193,7 @@ Examples:
     # Parse columns if provided
     columns = None
     if args.columns:
-        columns = [col.strip() for col in args.columns.split(',')]
+        columns = [col for col in args.columns.split(',')]
         print(f"Will process columns: {columns}")
     
     # Preview mode

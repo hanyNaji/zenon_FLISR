@@ -18,6 +18,7 @@ def run(input_file_1, output_folder, use_scr_xml):
     else:
         subdest_df = pd.read_excel(r"{}\alc_machine_var.xlsx".format(output_folder))
     output_excel = r"{}\alc_DB_FLIS.xlsx".format(output_folder)
+    print()
     print("="*40)
     print("  Extracting Machine Connections and Isolations Script")
     print("="*40)

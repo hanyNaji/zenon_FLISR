@@ -7,6 +7,7 @@ import re
 
 def run(input_alc_xml, output_folder):
     output_excel = r"{}\alc_machine_var.xlsx".format(output_folder)
+    print()
     print("="*40)
     print("  Extracting Machine Names and Variables from XML of ALC")
     print("="*40)

@@ -10,6 +10,7 @@ def run(scr_xml_file, output_folder, use_scr_xml):
     nvar_excel = r"{}\alc_machine_var.xlsx".format(output_folder)
     output_excel = r"{}\scr_machine_var.xlsx".format(output_folder)
 
+    print()
     print("="*40)
     print("  Extracting Machine Names and Variables from XML of SCREENS")
     print("="*40)
