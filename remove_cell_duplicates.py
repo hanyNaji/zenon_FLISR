@@ -36,7 +36,7 @@ def remove_duplicates_from_cell(cell_value: Any, separator: str = ',') -> tuple[
         cell_value = str(cell_value)
     
     # Split by separator, strip whitespace, and remove duplicates while preserving order
-    items = [item.strip() for item in cell_value.split(separator)]
+    items = [item for item in cell_value.split(separator)]
     original_count = len([item for item in items if item])  # Count non-empty items
     
     # Remove duplicates while preserving order
@@ -51,7 +51,7 @@ def remove_duplicates_from_cell(cell_value: Any, separator: str = ',') -> tuple[
     duplicates_removed = original_count - unique_count
     
     # Join back with separator and space for readability
-    cleaned_value = f'{separator} '.join(unique_items)
+    cleaned_value = f'{separator}'.join(unique_items)
     return cleaned_value, duplicates_removed
 
 

@@ -606,10 +606,12 @@ def run(xml_file, output_folder, use_scr_xml):
                                                 for id in path:
                                                     if id == node.split('>')[0]:
                                                         con_variable = find_variable_stand_alone(id)
+                                                        if con_variable == None:
+                                                            continue
                                                         valid_code = []
                                                         for code in nop_codes:
                                                             if code.startswith('Y'):
-                                                                if code in con_variable:
+                                                                if con_variable and code in con_variable:
                                                                     valid_code.append(code)
                                                             elif code.startswith('T'):
                                                                 q_code = '.Q' + code[1:]

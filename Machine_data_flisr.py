@@ -276,13 +276,13 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
         ID = row['ID']
         if "NOP" not in ID:
             continue
-        con_machines = row['NOP'].split(",")
+        con_machines = [x for x in row['Location Equipments IDs'].split(",") if x.strip()] if pd.notna(row['Location Equipments IDs']) else []
         picture = str(row['Picture'])
         feeder = row['FeederNo']
 
         # Get feeder name of connected machines
         for con_machine in con_machines:
-            if con_machine == "NOP":
+            if con_machine == "-":
                 continue
             feeder_con_mask = (df2['Picture'] == picture) & (df2['ID'] == con_machine)
             feeder_con_results = df2.loc[feeder_con_mask, 'FeederNo']

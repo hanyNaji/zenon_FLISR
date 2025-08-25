@@ -4,13 +4,13 @@ import ctypes
 use_scr_xml = True
 
 ###############------ CHANGE THIS ------###############
-alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\ARAR\SLD_RAFHA_OFFICE\RT\FILES\zenon\system\alc.XML"
-scr_xml_file = r"D:\chnge order\FLISR\ARAR\SCREENS\RAF.XML"
-output_folder = r"D:\Zenon py\Line follower\FLISR\outputs\4"
+alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\QASSIM\WEST_QASSIM_OFFICE\RT\FILES\zenon\system\alc.XML"
+scr_xml_file = r"D:\chnge order\FLISR\QASSIM\SCREENS\WST.XML"
+output_folder = r"D:\Zenon py\Line follower\FLISR\outputs\3"
 
 # OUTPUT_FILE = r"D:\chnge order\FLISR\KHARJ\KHA_SUL_DB_FLISR.xlsx"
-ADMINISTRATION = "NOB"
-OFFICE_NAME = "RAF"
+ADMINISTRATION = "QAS"
+OFFICE_NAME = "WST"
 OFFICE_NO = ""
 ###############------ CHANGE THIS ------###############
 
@@ -42,5 +42,5 @@ if __name__ == "__main__":
     run_all()
 
 
-    # Show a message box & sound alert
-    ctypes.windll.user32.MessageBoxW(0, f"FLISR processing complete...\n{PROJECT_NAME}", "Notification", 1)
+    # Show a message box & sound alert 
+    ctypes.windll.user32.MessageBoxW(0, f"FLISR processing complete...\nProject: {PROJECT_NAME}\nWorkspace: {scr_xml_file.split("\\")[3]}", "Notification", 0x40 | 0x1)
