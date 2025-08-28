@@ -75,6 +75,7 @@ def run(input_file_1, output_folder, use_scr_xml):
         "Rectangle",
         "LINK_SLD",
         "ALC_LBS",
+        "AR_OPEN",
         "Static",
         "ALC_CB",
         "OH_PMT",
@@ -453,10 +454,10 @@ def run(input_file_1, output_folder, use_scr_xml):
         return id_to_subdest.get((str(picture), str(id_val)), id_val)
 
     def map_id_to_smart(picture, id_val):
-        return id_to_smart.get((str(picture), str(id_val)), "-")
+        return id_to_smart.get((str(picture), str(id_val)), "NON SMART")
 
     def map_id_to_visualname(picture, id_val):
-        return id_to_visualname.get((str(picture), str(id_val)), "-")
+        return id_to_visualname.get((str(picture), str(id_val)), id_val)
 
 
     def map_id_to_FeederNo(picture, id_val):
@@ -725,14 +726,18 @@ def run(input_file_1, output_folder, use_scr_xml):
             smart_var_id = get_machine_name(smart_id)
             if any(smart_var_id.startswith(prefix) for prefix in special_prefixes):
                 # Get variable from id_to_subdest
-                smart_var = id_to_subdest.get((picture, smart_var_id), "-")
+                smart_var = map_id_to_subdest(picture, smart_var_id)
+                if smart_var == smart_var_id:
+                    smart_var = "-"
             else:
                 smart_var = find_variable_stand_alone(smart_id)
 
-            if ("FDR" in smart_var_id or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in smart_var_id) and smart_var != "-": # FDR
-                smart_var = smart_var.split("_OC_", 1)[0] if "_OC_" in smart_var else smart_var.split("_CB_IND", 1)[0]
-            elif any(smart_var_id.startswith(prefix) for prefix in smart_rec_sec):
-                smart_var = smart_var.replace("_OC_ST", "_OPN_CMD")
+            if "FDR" in smart_var: # FDR
+                smart_var = smart_var 
+            elif "_SRECSEC" in smart_var:
+                smart_var = smart_var
+            elif "_SLBS" in smart_var:
+                smart_var = smart_var
             elif "#" in smart_var and ("_Y" in smart_var or "_TR_" in smart_var): # SMART rmu
                 smart_var = smart_var.split("_OC_", 1)[0]
             else: # use ID
@@ -784,30 +789,29 @@ def run(input_file_1, output_folder, use_scr_xml):
                 # Get variable from id_to_subdest
                 con_var = id_to_subdest.get((picture, parts[1]), "-")
 
-                if con_var == "-":
-                    con_var = find_variable_stand_alone(parts[0])
-                if con_var == "-":
-                    con_var = parts[1]
-                if ("FDR" in parts[1] or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in parts[1]) and con_var != "-":
-                    con_var = con_var.split("_OC_", 1)[0]
+                if "FDR" in con_var: # FDR
+                    con_var = con_var
+                elif "_SRECSEC" in con_var:
+                    con_var = con_var
+                elif "_SLBS" in con_var:
+                    con_var = con_var
+                elif "#" in con_var:
                     con_var = con_var + "_EF_ST"
-                elif any(parts[1].startswith(prefix) for prefix in smart_rec_sec) and "#" in con_var:
-                    con_var = con_var.split("_OC_", 1)[0]
-                    con_var = con_var + "_E_FLT"
-                elif any(parts[1].startswith(prefix) for prefix in smart_lbs) and "#" in con_var:
-                    con_var = con_var.split("_OC_", 1)[0]
-                    con_var = con_var + "_EFI_ST"
-                elif any(parts[1].startswith(prefix) for prefix in smart_rec_sec) and "#" not in con_var and con_var != "-":
-                    con_var = con_var.split("_OC_", 1)[0]
-                    con_var = con_var + ""
-                elif any(parts[1].startswith(prefix) for prefix in smart_lbs) and "#" not in con_var and con_var != "-":
-                    con_var = con_var.split("_OC_", 1)[0]
-                    con_var = con_var + ""
+                elif con_var != "-":
+                    con_var = con_var + ".EF_ST"
+                else: # use ID
+                    con_var = parts[1]
+
+                # elif any(parts[1].startswith(prefix) for prefix in smart_rec_sec) and "#" not in con_var and con_var != "-":
+                #     con_var = con_var.split("_OC_", 1)[0]
+                #     con_var = con_var + ""
+                # elif any(parts[1].startswith(prefix) for prefix in smart_lbs) and "#" not in con_var and con_var != "-":
+                #     con_var = con_var.split("_OC_", 1)[0]
+                #     con_var = con_var + ""
                 # if "#" in con_var and "_Y" not in con_var and "_TR_" not in con_var and len(con_var) > 22: # FDR
                 #     con_var = con_var.split("_OC_", 1)[0]
                 #     con_var = con_var + "_EF_ST"
                     # con_var = con_var.split("#", 1)[1].split("_OC_", 1)[0]
-
                 # elif "#" in con_var and "_Y" in con_var: # SMRT
                 #     con_var = con_var.split("_Y", 1)[0]
                 #     con_var = con_var + "_EF_ST"
@@ -818,12 +822,6 @@ def run(input_file_1, output_folder, use_scr_xml):
                 # elif "." in con_var: # OLD
                 #     con_var = con_var.split(".", 1)[0]
                 #     con_var = con_var + ".EF_ST"
-                elif "#" in con_var:
-                    con_var = con_var + "_EF_ST"
-                elif con_var != "-":
-                    con_var = con_var + ".EF_ST"
-                else: # use ID
-                    con_var = parts[1]
 
                 valid_loc_vars.append(con_var) if ">" not in con_var else valid_loc_vars.append(parts[1])
                 output_df_1.at[idx, f"Con{i}"] = con_var if ">" not in con_var else parts[1]
@@ -855,20 +853,15 @@ def run(input_file_1, output_folder, use_scr_xml):
 
         machine = row["Machine"] ###########
         if machine != "-":
-            if "#" in machine: # SMART
-                if any(machine_id.startswith(prefix) for prefix in smart_rec_sec):
-                    machine = machine + "_E_FLT"
-                elif any(machine_id.startswith(prefix) for prefix in smart_lbs):
-                    machine = machine + "_EFI_ST"
-                else:
-                    machine = machine + "_EF_ST"
-            else: # OLD
-                if any(parts[1].startswith(prefix) for prefix in smart_rec_sec):
-                    machine = machine + ""
-                elif any(parts[1].startswith(prefix) for prefix in smart_lbs):
-                    machine = machine + ""
-                else:
-                    machine = machine + ".EF_ST"
+            if "_SRECSEC" in machine:
+                machine = machine.split("_OC_", 1)[0] + "_E_FLT"
+            elif "_SLBS" in machine:
+                machine = machine.split("_OC_", 1)[0] + "_EFI_ST"
+            elif "#" in machine:
+                machine = machine + "_EF_ST"
+            elif machine != "-" and machine != machine_id:
+                machine = machine + ".EF_ST"
+
             output_df_1.at[idx, "Machine"] = machine
 
         if "FDR" in machine_id or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in machine_id:

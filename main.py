@@ -5,41 +5,37 @@ from pathlib import Path
 
 # Main project runner for FLISR
 # Define all input/output paths here
-use_scr_xml = True
+use_scr_xml = False
 
 ###############------ CHANGE THIS ------###############
-alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\DAMMAM_AREA\SLD_DAMMAM_10\RT\FILES\zenon\system\alc.XML"
-scr_xml_file = r"D:\chnge order\FLISR\DAMMAM\screens\dmm10_scr.XML"
-output_folder = r"D:\Zenon py\Line follower\FLISR\outputs\10"
+alc_xml_file = r"D:\chnge order\FLISR\SERVICE ENGINE\JUBAIL_NEW\JUBAIL_SLD\RT\FILES\zenon\system\alc.XML"
+# scr_xml_file = r"D:\chnge order\FLISR\JUBAIL\SCREENS\HFR.XML"
+output_folder = r"D:\chnge order\FLISR"
 
-ADMINISTRATION = "DMM"
-OFFICE_NAME = "DMM"
-OFFICE_NO = "10"
+# ADMINISTRATION = "NED"
+# OFFICE_NAME = "HFR"
+# OFFICE_NO = ""
 ###############------ CHANGE THIS ------###############
 
 # --- Paths ---
 alc_path = Path(alc_xml_file)
-scr_path = Path(scr_xml_file)
-out_dir = Path(output_folder)
+# scr_path = Path(scr_xml_file)
+project_name_only = alc_path.parents[4].name
+workspace_name = alc_path.parents[5].name
+
+out_dir = Path(output_folder) / "outputs" / workspace_name / project_name_only  # outputs/Workspace/Project
 
 # Make sure output folder exists
 out_dir.mkdir(parents=True, exist_ok=True)
 
-# Robust: Project/Workspace from ALC path (fallbacks if path depth is shallow)
-project_name_only = alc_path.parents[4].name
-workspace_name = alc_path.parents[5].name
 
 PROJECT_NAME = project_name_only + "#"
 
-# Build OUTPUT_FILE based on the first four components of scr_xml_file (as you intended)
-# D:\chnge order\FLISR\DAMMAM\screens\...  -> base = "D:\chnge order\FLISR\DAMMAM"
-scr_parts = scr_path.parts
-if len(scr_parts) >= 4:
-    scr_base = Path(scr_parts[0]) / scr_parts[1] / scr_parts[2] / scr_parts[3]
-else:
-    scr_base = scr_path.parent  # fallback
+output_file_base = Path(output_folder) / workspace_name / project_name_only
+output_file_base.mkdir(parents=True, exist_ok=True)
 
-OUTPUT_FILE = scr_base / f"{ADMINISTRATION}_{OFFICE_NAME}{OFFICE_NO}_DB_FLISR.xlsx"
+OUTPUT_FILE = output_file_base / f"{workspace_name.split("_")[0]}_{project_name_only}_DB_FLISR.xlsx"
+
 
 def run_all():
     print("Running all FLISR scripts...")
@@ -48,7 +44,7 @@ def run_all():
     print(f"  Workspace: {workspace_name}")
     print("---------------------------------------------------------")
     print(f"  ALC XML:        {alc_path}")
-    print(f"  SCR XML:        {scr_path} (use_scr_xml={use_scr_xml})")
+    # print(f"  SCR XML:        {scr_path} (use_scr_xml={use_scr_xml})") 
     print(f"  Output folder:  {out_dir}")
     print(f"  Final Output :  {OUTPUT_FILE}")
     print("---------------------------------------------------------")
@@ -63,10 +59,10 @@ def run_all():
     from Machine_data_flisr import run as machine_data_flisr
 
     Extract_data_ALC(str(alc_path), str(out_dir))
-    Extract_data_SCREENS(str(scr_path), str(out_dir), use_scr_xml)
+    # Extract_data_SCREENS(str(scr_path), str(out_dir), use_scr_xml)
     Alc_Machines_loc_Iso(str(alc_path), str(out_dir), use_scr_xml)
     assign_feeder_to_machines(str(alc_path), str(out_dir), use_scr_xml)
-    machine_data_flisr(str(OUTPUT_FILE), str(out_dir), PROJECT_NAME, ADMINISTRATION, OFFICE_NAME, use_scr_xml)
+    machine_data_flisr(str(OUTPUT_FILE), str(out_dir), PROJECT_NAME, project_name_only, use_scr_xml)
 
 if __name__ == "__main__":
     run_all()

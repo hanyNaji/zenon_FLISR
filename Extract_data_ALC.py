@@ -64,6 +64,7 @@ def run(input_alc_xml, output_folder):
         "Rectangle",
         "LINK_SLD",
         "ALC_LBS",
+        "AR_OPEN",
         "Static",
         "ALC_CB",
         "OH_PMT",
@@ -221,6 +222,23 @@ def run(input_alc_xml, output_folder):
         "3L1T_4_1_1_2",
     ])
 
+    smart_rec_sec = set([
+        "INTEGRATION_PROJECT_NON_SMT_SECTIONALIZER",
+        "INTEGRATION_PROJECT_NON_SMT_AUTO_RECLOSER",
+        "INTEGRATION_PROJECT_NON_SMART_AUTO_RECLOSER",
+        "INTEGRATION_PROJECT_NON_SMART_SECTIONALIZER",
+        "INTEGRATION_PROJECT_SMT_SECTIONALIZER",
+        "INTEGRATION_PROJECT_SMT_AUTO_RECLOSER",
+        "INTEGRATION_PROJECT_SMART_AUTO_RECLOSER",
+        "INTEGRATION_PROJECT_SMART_SECTIONALIZER"
+    ])
+
+    smart_lbs = set([
+        "INTEGRATION_PROJECT_SMT_SLD_LBS",
+        "INTEGRATION_PROJECT_SMART_SLD_LBS",
+        "INTEGRATION_PROJECT_NON_SMART_SLD_LBS",
+        "INTEGRATION_PROJECT_NON_SMT_SLD_LBS",
+    ])
 
 
     tree = ET.parse(input_alc_xml)
@@ -308,8 +326,15 @@ def run(input_alc_xml, output_folder):
         elif "#" in variable and "_TR_" in variable:  # SMART
             variable_base = variable.split("_TR_", 1)[0]
         elif "#" in variable and "_Y" not in variable and "_TR_" not in variable and not "#ICCP_IND" in variable and not "#ICCP_OC" in variable:  # FDR
-            variable_base = variable.split("_OC_", 1)[0] if "_OC_" in variable else variable.split("_CB_", 1)[0]
-        
+            if ("FDR" in element_id or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in element_id): # FDR
+                variable_base = variable + "_FDR"
+            elif any(element_id.startswith(prefix) for prefix in smart_rec_sec):
+                variable_base = variable + "_SRECSEC"
+            elif any(element_id.startswith(prefix) for prefix in smart_lbs):
+                variable_base = variable + "_SLBS"
+        elif ("FDR" in element_id or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in element_id) and "#" not in variable and "_OC_" in variable or "_CB_" in variable:  # FDR
+            variable_base = variable + "_LFDR"
+
         if variable_base == "-":
             continue
             
@@ -332,11 +357,14 @@ def run(input_alc_xml, output_folder):
 
         if element_id.startswith("INTEGRATION_PROJECT_SLD_FDR") or element_id.startswith("INTEGRATION_PROJECT_NON_SMART_CB_SLD"):
             smart = "SMART"
-            station = variable_base.split("#")[1] if "#" in variable_base else variable_base
-            station = station.split("_CB")[0] if "_CB" in station else station
-            station = station.split("_OC")[0] if "_OC" in station else station
+            feeder_name = variable_base.split("#")[1] if "#" in variable_base else variable_base
+            feeder_name = feeder_name.split("_CB")[0] if "_CB" in feeder_name else feeder_name
+            feeder_name = feeder_name.split("_OC")[0] if "_OC" in feeder_name else feeder_name
+            station = feeder_name
             station = station.replace("ICCP_", "")
-            feeder_name = station
+            station = station.replace("PTG_", "")
+            station = station.split("_")[0] if "_" in station else station
+
         
         if element_id.startswith("INTEGRATION_PROJECT_SMART") or element_id.startswith("INTEGRATION_PROJECT_SMT"):
             smart = "SMART"
