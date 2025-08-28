@@ -67,6 +67,7 @@ def run(scr_xml_file, output_folder, use_scr_xml):
         "Rectangle",
         "LINK_SLD",
         "ALC_LBS",
+        "AR_OPEN",
         "Static",
         "ALC_CB",
         "OH_PMT",
@@ -281,11 +282,15 @@ def run(scr_xml_file, output_folder, use_scr_xml):
 
             
             
-            if "FDR" in id_val or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in id_val:  # RYAD # QASSIM # JUBAIL
-                station = sub_dest.split("#")[1] if "#" in sub_dest else sub_dest
-                station = station.split("_CB")[0] if "_CB" in station else station
-                station = station.split("_OC")[0] if "_OC" in station else station
-                feeder_name = station
+            
+            if "FDR" in id_val or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in id_val:
+                feeder_name = sub_dest.split("#")[1] if "#" in sub_dest else sub_dest
+                feeder_name = feeder_name.split("_CB")[0] if "_CB" in feeder_name else feeder_name
+                feeder_name = feeder_name.split("_OC")[0] if "_OC" in feeder_name else feeder_name
+                station = feeder_name
+                station = station.replace("ICCP_", "")
+                station = station.replace("PTG_", "")
+                station = feeder_name.split("_")[0] if "_" in feeder_name else feeder_name
             
             # if "FDR" in id_val or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in id_val:  #DAMMAM
             #     # Extract station and feeder_name from ExpProps
@@ -339,15 +344,14 @@ def run(scr_xml_file, output_folder, use_scr_xml):
             nvar_df.at[idx, "SMART"] = xml_lookup[key]["SMART"]
             nvar_df.at[idx, "VisualName"] = xml_lookup[key]["VisualName"] if xml_lookup[key]["VisualName"] != "-" else None
             
-            # Add Station and FeederNo columns if they don't exist
-            if "Station" not in nvar_df.columns:
-                nvar_df["Station"] = "-"
-            if "FeederNo" not in nvar_df.columns:
-                nvar_df["FeederNo"] = "-"
-                
-            # Update Station and FeederNo from XML
-            nvar_df.at[idx, "Station"] = xml_lookup[key]["Station"]
-            nvar_df.at[idx, "FeederNo"] = xml_lookup[key]["FeederNo"]
+            # # Add Station and FeederNo columns if they don't exist
+            # if "Station" not in nvar_df.columns:
+            #     nvar_df["Station"] = "-"
+            # if "FeederNo" not in nvar_df.columns:
+            #     nvar_df["FeederNo"] = "-"
+            # # Update Station and FeederNo from XML
+            # nvar_df.at[idx, "Station"] = xml_lookup[key]["Station"]
+            # nvar_df.at[idx, "FeederNo"] = xml_lookup[key]["FeederNo"]
             
             if row["Variable"] == "-":
                 nvar_df.at[idx, "VisualName"] = xml_lookup[key]["VisualName"]

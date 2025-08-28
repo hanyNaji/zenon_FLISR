@@ -7,7 +7,7 @@ import re
 
 
 
-def run(output_file, output_folder, project_name, Administration, office_name, use_scr_xml):
+def run(output_file, output_folder, project_name, office_name, use_scr_xml):
     if use_scr_xml:
         var_df = pd.read_excel(r"{}\scr_machine_var.xlsx".format(output_folder))
     else:
@@ -52,67 +52,38 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
                 fno_val = matches['FeederNo'].values[0] if 'FeederNo' in matches else None
 
                 # Feeder Variables
-                if pd.notna(var_val) and str(var_val).strip() != "-":
-                    if Administration in ["DWD", "RUH", "QAS", "KHA"]:
-                        df2.at[idx, 'Feeder OCT Variable'] = f"{var_val}_CB_IND" if "_CB_" not in var_val else var_val
-                        df2.at[idx, 'Feeder CMD Variable'] = f"{var_val}_CB_CMD" if "_CB_" not in var_val else var_val
-                        if "#" not in var_val:
-                            df2.at[idx, 'Feeder OCT Variable'] = project_name + df2.at[idx, 'Feeder OCT Variable']
-                            df2.at[idx, 'Feeder CMD Variable'] = project_name + df2.at[idx, 'Feeder CMD Variable']
+                if pd.notna(var_val) and str(var_val) != "-":
+                    if var_val.endswith("_FDR"):
+                        var_val = var_val.replace("_FDR", "")
+                        if var_val.endswith("_OC_ST"):
+                            df2.at[idx, 'Feeder OCT Variable'] = var_val
+                            df2.at[idx, 'Feeder CMD Variable'] = var_val.replace("_OC_ST", "_OC_CMD")
+                        elif var_val.endswith("_CB_IND"):
+                            df2.at[idx, 'Feeder OCT Variable'] = var_val
+                            df2.at[idx, 'Feeder CMD Variable'] = var_val.replace("_CB_IND", "_CB_CMD")
+                        elif "CB_ST" in var_val:
+                            df2.at[idx, 'Feeder OCT Variable'] = var_val
+                            df2.at[idx, 'Feeder CMD Variable'] = var_val.replace("CB_ST", "_CB_CMD")
+                    elif var_val.endswith("_LFDR"):
+                        var_val = var_val.replace("_LFDR", "")
+                        if var_val.endswith("_OC_ST"):
+                            df2.at[idx, 'Feeder OCT Variable'] = project_name + var_val
+                            df2.at[idx, 'Feeder CMD Variable'] = project_name + var_val.replace("_OC_ST", "_OC_CMD")
+                        elif var_val.endswith("_CB_IND"):
+                            df2.at[idx, 'Feeder OCT Variable'] = project_name + var_val
+                            df2.at[idx, 'Feeder CMD Variable'] = project_name + var_val.replace("_CB_IND", "_CB_CMD")
+                        elif "CB_ST" in var_val:
+                            df2.at[idx, 'Feeder OCT Variable'] = project_name + var_val
+                            df2.at[idx, 'Feeder CMD Variable'] = project_name + var_val.replace("CB_ST", "_CB_CMD")
                     else:
-                        df2.at[idx, 'Feeder OCT Variable'] = f"{var_val}_OC_ST"
-                        df2.at[idx, 'Feeder CMD Variable'] = f"{var_val}_OC_CMD"
+                        df2.at[idx, 'Feeder OCT Variable'] = "NO VARIABLE"
+                        df2.at[idx, 'Feeder CMD Variable'] = "NO VARIABLE"
                 else:
                     df2.at[idx, 'Feeder OCT Variable'] = "NO VARIABLE"
                     df2.at[idx, 'Feeder CMD Variable'] = "NO VARIABLE"
 
-                # if Administration in ["DWD", "RUH"]:
-                #     sta_val = var_val.split("#")[1] if "#" in var_val else var_val
-                #     sta_val = sta_val.split("_CB_")[0] if "_CB_" in sta_val else sta_val
-                #     fno_val = sta_val
-                #     df2.at[idx, 'Station'] = sta_val 
-                #     df2.at[idx, 'FeederNo'] = fno_val
-                # else:
                 df2.at[idx, 'Station'] = sta_val if pd.notna(sta_val) and str(sta_val).strip() != "-" else "-"
                 df2.at[idx, 'FeederNo'] = fno_val if pd.notna(fno_val) and str(fno_val).strip() != "-" else "-"
-            # else:
-            #     # No match found for this feeder ID in var_df
-            #     df2.at[idx, 'Feeder OCT Variable'] = "<only ID found>"
-            #     df2.at[idx, 'Feeder CMD Variable'] = "<only ID found>"
-            #     df2.at[idx, 'Station'] = "<only ID found>"
-            #     df2.at[idx, 'FeederNo'] = "<only ID found>"
-
-        # elif pd.notna(feederNO) and feederNO != "-":
-        #     matches_2 = var_df[(var_df['ScreenName'] == picture) & (var_df['FeederNo'] == feederNO)]
-        #     # If picture matches ScreenName and feederNo matches FeederNo, assign the values  
-        #     if not matches_2.empty:
-        #         df2.at[idx, 'Feeder OCT Variable'] = matches_2['Variable'].values[0] + "_OC_ST" if matches_2['Variable'].values[0] != "-" else "-"
-        #         df2.at[idx, 'Feeder CMD Variable'] = matches_2['Variable'].values[0] + "_OC_CMD" if matches_2['Variable'].values[0] != "-" else "-"
-        #         df2.at[idx, 'Station'] = matches_2['Station'].values[0]
-        #         df2.at[idx, 'FeederNo'] = matches_2['FeederNo'].values[0] 
-    # # Additional matching: If picture and feederNo from df2 matches ScreenName and FeederNo from var_df
-    # for idx, row in df2.iterrows():
-    #     picture = str(row['Picture'])
-    #     feederNO = row['FeederNo']
-    # 
-    #     # Skip if essential data is missing
-    #     if pd.isna(picture) or picture == "-" or pd.isna(feederNO) or feederNO == "-":
-    #         continue
-    #
-    #     # Find exact matches where both picture (ScreenName) and FeederNo match
-    #     exact_matches = var_df[(var_df['ScreenName'] == picture) & (var_df['FeederNo'] == feederNO)]
-    #
-    #     if not exact_matches.empty:
-    #         # Assign all the values from the matching row
-    #         match_row = exact_matches.iloc[0]  # Take first match if multiple
-    #         df2.at[idx, 'Station'] = match_row['Station'] if pd.notna(match_row['Station']) else row['Station']
-    #         df2.at[idx, 'FeederNo'] = match_row['FeederNo'] if pd.notna(match_row['FeederNo']) else row['FeederNo']
-    #
-    #         # Assign feeder variables
-    #         substitute_dest = match_row['Variable'] if pd.notna(match_row['Variable']) else "-"
-    #         if substitute_dest != "-":
-    #             df2.at[idx, 'Feeder OCT Variable'] = substitute_dest + "_OC_ST"
-    #             df2.at[idx, 'Feeder CMD Variable'] = substitute_dest + "_OC_CMD"
 
     # Replace empty cells with a dash
     df2.fillna("-", inplace=True)
@@ -122,34 +93,67 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
 
     ###################### Isolation, Location #####################
 
-    smart_rec_sec = set([
-        "INTEGRATION_PROJECT_NON_SMT_SECTIONALIZER",
-        "INTEGRATION_PROJECT_NON_SMT_AUTO_RECLOSER",
-        "INTEGRATION_PROJECT_NON_SMART_AUTO_RECLOSER",
-        "INTEGRATION_PROJECT_NON_SMART_SECTIONALIZER",
-        "INTEGRATION_PROJECT_SMT_SECTIONALIZER",
-        "INTEGRATION_PROJECT_SMT_AUTO_RECLOSER",
-        "INTEGRATION_PROJECT_SMART_AUTO_RECLOSER",
-        "INTEGRATION_PROJECT_SMART_SECTIONALIZER"
-    ])
-
     for idx, row in tqdm(df2.iterrows(), total=df2.shape[0], desc="Finishing up 1/2"):
         after_eq = ""
         for i in range(2, 8):
             con = row[f"Con{i}"]
             if con == "-":
                 break
-            if Administration in ["DWD", "RUH", "QAS", "KHA"] and "ICCP" in con:
-                after_eq = (after_eq + con.replace("_EF_ST", "")+ ",")
+            if con.endswith("_FDR"):
+                con = con.replace("_FDR", "")
+                if con.endswith("_OC_ST"):
+                    after_eq = (after_eq + con.replace("_OC_ST", "_EF_ST")+ ",")
+                elif con.endswith("_CB_IND"):
+                    after_eq = (after_eq + con.replace("_CB_IND", "")+ ",")##@hanyNaji
+                elif "CB_ST" in con:
+                    after_eq = (after_eq + con.replace("_CB_ST", "")+ ",")
+            elif con.endswith("_LFDR"): ##@hanyNaji
+                con = con.replace("_LFDR", "")
+                if con.endswith("_OC_ST"):
+                    after_eq = (after_eq + project_name + con.replace("_OC_ST", "")+ ",")
+                elif con.endswith("_CB_IND"):
+                    after_eq = (after_eq + project_name + con.replace("_CB_IND", "")+ ",")
+                elif "CB_ST" in con:
+                    after_eq = (after_eq + project_name + con.replace("_CB_ST", "")+ ",")
+
+            elif con.endswith("_SRECSEC"):
+                con = con.replace("_SRECSEC", "")
+                after_eq = (after_eq + con.replace("_OC_ST", "_E_FLT")+ ",")
+            elif con.endswith("_SLBS"):
+                con = con.replace("_SLBS", "")
+                after_eq = (after_eq + con.replace("_OC_ST", "_EFI_ST")+ ",")
+
             else:
                 after_eq = (after_eq + project_name + con + ",") if "." in con else (after_eq + con + ",")
             df2.at[idx, "After Equipments EF Variables"] = after_eq
 
         df2.at[idx, "Machine"] = (project_name + row["Machine"]) if "." in row["Machine"] else row["Machine"]
-        if Administration in ["DWD", "RUH", "QAS", "KHA"] and "ICCP" in row["Con1"]:
-            df2.at[idx, "Con1"] = (row["Con1"].replace("_EF_ST", ""))
+
+        con1 = row["Con1"]
+        if con1.endswith("_FDR"):
+            con1 = con1.replace("_FDR", "")
+            if con1.endswith("_OC_ST"):
+                df2.at[idx, "Con1"] = con1.replace("_OC_ST", "_EF_ST")
+            elif con1.endswith("_CB_IND"):
+                df2.at[idx, "Con1"] = con1.replace("_CB_IND", "")
+            elif "CB_ST" in con1:
+                df2.at[idx, "Con1"] = con1.replace("_CB_ST", "")
+        elif con1.endswith("_LFDR"):
+            con1 = con1.replace("_LFDR", "")
+            if con1.endswith("_OC_ST"):
+                df2.at[idx, "Con1"] = project_name + con1.replace("_OC_ST", "")
+            elif con1.endswith("_CB_IND"):
+                df2.at[idx, "Con1"] = project_name + con1.replace("_CB_IND", "")
+            elif "CB_ST" in con1:
+                df2.at[idx, "Con1"] = project_name + con1.replace("_CB_ST", "")
+        elif con1.endswith("_SRECSEC"):
+            con1 = con1.replace("_SRECSEC", "")
+            df2.at[idx, "Con1"] = con1.replace("_OC_ST", "_E_FLT")
+        elif con1.endswith("_SLBS"):
+            con1 = con1.replace("_SLBS", "")
+            df2.at[idx, "Con1"] = con1.replace("_OC_ST", "_EFI_ST")
         else:
-            df2.at[idx, "Con1"] = (project_name + row["Con1"]) if "." in row["Con1"] else row["Con1"]
+            df2.at[idx, "Con1"] = (project_name + con1) if "." in con1 else con1
 
         iso_oct = ""
         iso_cmd = ""
@@ -157,33 +161,42 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
             iso = row[f"ISO{i}"]
             if iso == "-":
                 break
-            if "#" in iso:
-                if "_DCC#" in iso and "_OPN_CMD" in iso:
-                    iso_oct = iso_oct + iso.replace("_OPN_CMD", "_OC_ST") + ","
-                    iso_cmd = iso_cmd + iso + ","
-                elif Administration in ["DWD", "RUH", "QAS", "KHA"]:
-                    if "ICCP" in iso:
-                        iso_oct = iso_oct + iso + "_CB_IND" + ","
-                        iso_cmd = iso_cmd + iso + "_CB_CMD" + ","
-                    elif "CB_ST" in iso:
-                        iso_oct = iso_oct + iso + ","
-                        iso_cmd = iso_cmd + iso.replace("_ST", "_CMD") + ","
-                    else:
-                        iso_oct = iso_oct + iso + "_OC_ST" + ","
-                        iso_cmd = iso_cmd + iso + "_OC_CMD" + ","
-                else:
-                    iso_oct = iso_oct + iso + "_OC_ST" + ","
-                    iso_cmd = iso_cmd + iso + "_OC_CMD" + ","
-            else:
-                if "ICCP#" in iso:
-                    iso_oct = iso_oct + iso + "_CB_IND" + ","
-                    iso_cmd = iso_cmd + iso + "_CB_CMD" + ","
+            if iso.endswith("_FDR"):
+                iso = iso.replace("_FDR", "")
+                if iso.endswith("_OC_ST"):
+                    iso_oct = iso_oct + iso + ","
+                    iso_cmd = iso_cmd + iso.replace("_OC_ST", "_OC_CMD") + ","
+                elif iso.endswith("_CB_IND"):
+                    iso_oct = iso_oct + iso + ","
+                    iso_cmd = iso_cmd + iso.replace("_CB_IND", "_CB_CMD") + ","
                 elif "CB_ST" in iso:
                     iso_oct = iso_oct + iso + ","
-                    iso_cmd = iso_cmd + iso.replace("_ST", "_CMD") + ","
-                else:
-                    iso_oct = iso_oct + iso + ","
-                    iso_cmd = iso_cmd + iso + ","
+                    iso_cmd = iso_cmd + iso.replace("_CB_ST", "_CB_CMD") + ","
+            elif iso.endswith("_LFDR"):
+                iso = iso.replace("_LFDR", "")
+                if iso.endswith("_OC_ST"):
+                    iso_oct = iso_oct + project_name + iso + ","
+                    iso_cmd = iso_cmd + project_name + iso + "," #@hanyNaji
+                elif iso.endswith("_CB_IND"):
+                    iso_oct = iso_oct + project_name + iso + ","
+                    iso_cmd = iso_cmd + project_name + iso + "," #@hanyNaji
+                elif "CB_ST" in iso:
+                    iso_oct = iso_oct + project_name + iso + ","
+                    iso_cmd = iso_cmd + project_name + iso + "," #@hanyNaji
+            elif iso.endswith("_SRECSEC"):
+                iso = iso.replace("_SRECSEC", "")
+                iso_oct = iso_oct + iso + ","
+                iso_cmd = iso_cmd + iso.replace("_OC_ST", "_OPN_CMD") + ","
+            elif iso.endswith("_SLBS"):
+                iso = iso.replace("_SLBS", "")
+                iso_oct = iso_oct + iso + ","
+                iso_cmd = iso_cmd + iso.replace("_OC_ST", "_OC_CMD") + ","
+            elif "#" not in iso:
+                    iso_oct = iso_oct + project_name + iso + ","
+                    iso_cmd = iso_cmd + project_name + iso.replace("_ST", "_CMD") + ","
+            else:
+                iso_oct = iso_oct + iso + "_OC_ST" + ","
+                iso_cmd = iso_cmd + iso + "_OC_CMD" + ","
 
             df2.at[idx, "Isolation OCT Variables"] = iso_oct
             df2.at[idx, "Isolation CMD Variables"] = iso_cmd
@@ -482,7 +495,7 @@ def run(output_file, output_folder, project_name, Administration, office_name, u
 
     # Drop helper column
     df2.drop(columns=['Con2', 'Con3', 'Con4', 'Con5', 'Con6', 'Con7', 'Con8', 'Con9', 'Con10', 'Con11', 'Con12', 'Con13', 'Con14', 'ISO1', 'ISO2', 'ISO3', 'ISO4', 'ISO5', 'ISO6', 'ISO7', 'ISO8', 'ISO9', 'ISO10', 'ISO11', 'ISO12', 'ISO13', 'ISO14', 'NOP_Variables',
-                    'NOP', 'feeder_id', 'Location Equipments IDs', 'first machine in feeder', 'last machines in feeder'], inplace=True)
+                    'NOP', 'feeder_id', 'Isolation Equipments Numbers', 'Location Equipments IDs', 'first machine in feeder', 'last machines in feeder'], inplace=True)
 
     # Drop helper column
     # df2.drop(columns=['FeederNo_clean', 'VisualName_clean', 'best_match', 'Con2', 'Con3', 'Con4', 'Con5',  
