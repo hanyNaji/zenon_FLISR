@@ -31,7 +31,7 @@ out_dir.mkdir(parents=True, exist_ok=True)
 
 PROJECT_NAME = project_name_only + "#"
 
-output_file_base = Path(output_folder) / workspace_name / project_name_only
+output_file_base = Path(output_folder) / workspace_name
 output_file_base.mkdir(parents=True, exist_ok=True)
 
 OUTPUT_FILE = output_file_base / f"{workspace_name.split("_")[0]}_{project_name_only}_DB_FLISR.xlsx"
