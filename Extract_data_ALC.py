@@ -341,10 +341,14 @@ def run(input_alc_xml, output_folder):
         # Extract machine info
         station = "-"
         feeder_name = "-"
-        machine_name = variable_base.split("_")[-1] if "_" in variable_base else "-"
-        
+
+        machine_name_base = variable_base.replace("_FDR", "")
+        machine_name_base = variable_base.replace("_LFDR", "")
+        machine_name_base = variable_base.replace("_SLBS", "")
+        machine_name_base = variable_base.replace("_SRECSEC", "")
+        machine_name = machine_name_base.split("_")[-1] if "_" in machine_name_base else "-"
         if machine_name != "-" and not any(char.isdigit() for char in machine_name):
-            machine_name = "_".join(variable_base.split("_")[-2:]) if "_" in variable_base else "-"
+            machine_name = "_".join(machine_name_base.split("_")[-2:]) if "_" in machine_name_base else "-"
         
         # Determine if SMART
         smart = "NON SMART"
