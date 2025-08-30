@@ -154,85 +154,7 @@ def run(input_file_1, output_folder, use_scr_xml):
             elementid_to_graph_element[ID] = graph_element
 
 
-    def find_variable_for_machine(picture, machine_id):
-        """Find all variables for a given machine by searching by picture and (machine_id in elementRef) in xml."""
-        for _picture, elements in data_by_picture.items():
-            if _picture != picture:
-                continue
-            for graph_element in elements:
-                ID = graph_element.find("ID").text if graph_element.find("ID") is not None else None
-                element_id = graph_element.find("ElementID").text if graph_element.find("ElementID") is not None else None
-                element_ref = graph_element.find("ElementRef").text if graph_element.find("ElementRef") is not None else None
-                element_type = graph_element.find("Type").text if graph_element.find("Type") is not None else None
-                # Extract ElementRefName
-                element_ref_name = None
-                if element_ref:
-                    parts = element_ref.split(".")
-                    if len(parts) > 0:
-                        element_ref_name = parts[1]  # Extract the portion after the first period and before the next
-
-                if element_ref_name == machine_id and _picture == picture and (element_type == "2" or element_type == "7"):
-                    variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
-                    if variable != "<No variable linked>" and (variable.endswith("OC_ST") or ("FDR" in element_ref_name or "INTEGRATION_PROJECT_NON_SMART_CB_SLD" in variable)):
-                        return variable
-        return "variable not found"
-
-    # Helper: Find variable by traversing connections
-    def find_variable(node_id, element_id, ref):
-        graph_element = elementid_to_graph_element.get(node_id)
-        if graph_element is None:
-            return "ID Not found"
-        element_ref = graph_element.find("ElementRef").text if graph_element.find("ElementRef") is not None else None
-        variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
-        parts_ = element_ref.split(".")
-        if any(parts_[1].startswith(prefix) for prefix in ignore_prefixes):
-            return parts_[1] # "Ignored"
-        if any(parts_[1].startswith(prefix) for prefix in special_prefixes) and variable != "<No variable linked>":
-            return variable + ">" + parts_[1]
-        visited = set()
-        visited.add(element_id)
-        stack = [node_id]
-        element_ref = "***"
-        counter = 0
-        while stack and parts_[1] in ref: # and parts[1] not in ignore_prefixes
-            if counter > 100:  # Prevent infinite loops
-                # print(f"Warning: Infinite loop detected for ElementID {element_id} with Node ID {node_id}. Stopping traversal.")
-                return parts_[1] if parts_ else "variable not found"
-            counter += 1
-            current_id = stack.pop()
-            if current_id in visited:
-                continue
-            visited.add(current_id)
-            graph_element = elementid_to_graph_element.get(current_id)
-            if graph_element is None:
-                element_ref = "ID Not found"
-                continue
-            element_ref = graph_element.find("ElementRef").text if graph_element.find("ElementRef") is not None else None
-            variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
-            if element_ref:
-                parts = element_ref.split(".")
-                # if any(parts[1].startswith(prefix) for prefix in ignore_prefixes):
-                #     return "Ignored"
-                if any(parts[1].startswith(prefix) for prefix in special_prefixes) and variable != "<No variable linked>":
-                    return variable + ">" + parts[1]
-                if len(parts) >3:
-                    if parts[2].startswith("INTEGRATION_PROJECT_ALC_ES") and parts[3] == "DC" and variable != "<No variable linked>":
-                        return variable + ">" + parts[1]
-                if len(parts) >2:
-                    if parts[2] == "ALC_LBS" and variable != "<No variable linked>":
-                        return variable + ">" + parts[1]
-                # if (
-                #     ("#" not in variable or
-                #     "." not in variable ) and
-                #     any(y in variable for y in ["Y1", "Y2", "Y3", "Y4", "Y5", "Y6"])
-                # ):
-                    
-            # Traverse further connections
-            next_node1_ids = [n.text for n in graph_element.findall(".//Node1IDs/ID")]
-            next_node2_ids = [n.text for n in graph_element.findall(".//Node2IDs/ID")]
-            stack.extend(next_node1_ids + next_node2_ids)
-        return parts_[1] if parts_ else "variable not found"
-
+######
     for picture, elements in tqdm(data_by_picture.items(), desc="Processing Pictures"):
         if "EMERGENCY" in str(picture).upper() or "EMRGENCY" in str(picture).upper():
             continue
@@ -250,6 +172,7 @@ def run(input_file_1, output_folder, use_scr_xml):
                 parts = element_ref.split(".")
                 if len(parts) > 0:
                     element_ref_name = parts[1]  # Extract the portion after the first period and before the next
+
             if element_ref_name.startswith("INTEGRATION_PROJECT_CABLE_RISER"):
                 element_ref_name = parts[2] + "_" + element_ref_name
             
@@ -568,7 +491,7 @@ def run(input_file_1, output_folder, use_scr_xml):
 
                 if element_ref_name == machine_id and _picture == picture and element_type == "2":
                     variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
-                    if variable != "<No variable linked>" and variable.endswith("OC_ST") or variable.endswith("GND_ST"):
+                    if variable != "<No variable linked>" and (variable.endswith("OC_ST") or variable.endswith("GND_ST")) and len(variable) > 20 and "RMU001_RING" not in variable:
                         variables.append(variable)
         return variables
                     
@@ -713,7 +636,8 @@ def run(input_file_1, output_folder, use_scr_xml):
         parts = element_ref.split('.')
         name = parts[1] if len(parts) > 1 else elem_id
         return name
-
+        
+    ####################
     # Use all_connections as built previously
     for idx, row in tqdm(output_df_1.iterrows(), total=output_df_1.shape[0], desc="Processing Isolations"):
         picture = str(row["Picture"])

@@ -268,7 +268,7 @@ def run(input_alc_xml, output_folder):
         if not element_ref:
             continue
             
-        parts = element_ref.split(".")
+        parts = element_ref.split(".")   # kjashfssfkaofnaoubfaiwufbawifbiab.2L1T_1.ALC_3.INTEGRATION_PROJECT_ALC_ES_SWITCH_LEFT_UP_1_1
         if len(parts) < 2:
             continue
             

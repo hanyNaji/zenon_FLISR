@@ -24,7 +24,6 @@ def run(xml_file, output_folder, use_scr_xml):
     os.makedirs(output_folder, exist_ok=True)
 
     # ---------- read inputs ----------
-    # subdest_df: ScreenName, ID, FeederNo (for some post checks)
     sub_cols = ["ScreenName", "ID", "FeederNo"]
     sub_path = os.path.join(output_folder, "scr_machine_var.xlsx" if use_scr_xml else "alc_machine_var.xlsx")
     try:
@@ -33,7 +32,6 @@ def run(xml_file, output_folder, use_scr_xml):
         subdest_df = pd.read_excel(sub_path, dtype=str, engine="openpyxl")
         subdest_df = subdest_df[[c for c in sub_cols if c in subdest_df.columns]]
 
-    # exact original columns to preserve from alc_DB_FLIS
     con_cols = [f"Con{i}" for i in range(1, 15)]     # Con1..Con14
     iso_cols = [f"ISO{i}" for i in range(1, 15)]     # ISO1..ISO14
     base_cols = [
@@ -49,12 +47,10 @@ def run(xml_file, output_folder, use_scr_xml):
     except Exception:
         machines = pd.read_excel(machines_path, dtype=str, engine="openpyxl")
 
-    # ensure all expected columns exist (filled with "-")
     for c in base_cols:
         if c not in machines.columns:
             machines[c] = "-"
 
-    # nodes df (lean)
     nodes_cols = ["Picture", "Node1 connections", "Node2 connections"]
     nodes_path = os.path.join(output_folder, "alc_Consolidated_Var.xlsx")
     try:
@@ -73,6 +69,7 @@ def run(xml_file, output_folder, use_scr_xml):
     # ---------- constants / prefixes ----------
     feederPrefixes = (
         "INTEGRATION_PROJECT_SLD_FDR_DSS_1_DOWN_ALIAS",
+        "INTEGRATION_PROJECT_NON_SMART_CB",   # kept as in your fast version
     )
     specialPrefixes = (
         "INTEGRATION_PROJECT_NON_SMT_SECTIONALIZER",
@@ -152,18 +149,19 @@ def run(xml_file, output_folder, use_scr_xml):
     graph_elements = root.find('GraphElements')
     elements = graph_elements.findall('GraphElement')
 
+    # Build element lookup and type map (fast structures)
     name_by_id = {}
     picture_by_id = {}
     type_by_id = {}
     variable_by_id = {}
     element_ref_by_id = {}
-    element_nodes_by_id = defaultdict(set)
     element_is_feeder = {}
     element_is_special = {}
-
     element_types_count = defaultdict(int)
-    node_to_elements = defaultdict(list)
-    node_feeder_names = defaultdict(set)
+
+    # Keep original objects to preserve EXACT var-finder + connections logic
+    all_elements = {}
+    elementid_to_graph_element = {}
 
     def _extract_name_from_element_ref(ref):
         if not ref:
@@ -178,6 +176,9 @@ def run(xml_file, output_folder, use_scr_xml):
         pic = ge.findtext('Picture') or 'NO_PICTURE'
         var = ge.findtext('Variable') or "-"
 
+        all_elements[eid] = ge
+        elementid_to_graph_element[eid] = ge
+
         nm = _extract_name_from_element_ref(eref)
         name_by_id[eid] = nm
         picture_by_id[eid] = pic
@@ -189,37 +190,54 @@ def run(xml_file, output_folder, use_scr_xml):
 
         element_types_count[int(etype) if etype.isdigit() else -1] += 1
 
-        for tag in ("Node1IDs", "Node2IDs"):
-            node_tag = ge.find(tag)
-            if node_tag is not None:
-                for n in node_tag.findall('ID'):
-                    nid = n.text
-                    element_nodes_by_id[eid].add(nid)
-                    node_to_elements[nid].append(eid)
-
     print("Element type distribution:")
     for t, c in sorted(element_types_count.items()):
         print(f"  Type {t}: {c}")
 
-    for nid, els in node_to_elements.items():
-        for e in els:
-            if element_is_feeder.get(e, False):
-                node_feeder_names[nid].add(name_by_id[e])
+    # ---------- Build connection graph EXACTLY like old (element <-> node bipartite) ----------
+    connections = defaultdict(set)
+    for elem in elements:
+        elem_id = elem.find('ID').text
+        node1 = elem.find('Node1IDs')
+        node2 = elem.find('Node2IDs')
+        # elem_name = name_by_id.get(elem_id, elem_id)  # unused, but kept as in old
 
+        if node1 is not None:
+            node1_ids = [n.text for n in node1.findall('ID')]
+            for n1 in node1_ids:
+                if n1 not in connections[elem_id]:
+                    connections[elem_id].add(n1)
+                if elem_id not in connections[n1]:
+                    connections[n1].add(elem_id)
+        if node2 is not None:
+            node2_ids = [n.text for n in node2.findall('ID')]
+            for n2 in node2_ids:
+                if n2 not in connections[elem_id]:
+                    connections[elem_id].add(n2)
+                if elem_id not in connections[n2]:
+                    connections[n2].add(elem_id)
+
+    # ---------- Group elements by Picture (same as old) ----------
     picture_groups = defaultdict(list)
-    for eid, pic in picture_by_id.items():
-        if EMERGENCY_FILTER and ('EMERGENCY' in str(pic).upper() or 'EMRGENCY' in str(pic).upper()):
+    for elem in elements:
+        picture = elem.find('Picture').text if elem.find('Picture') is not None else 'NO_PICTURE'
+        if EMERGENCY_FILTER and ('EMERGENCY' in str(picture).upper() or 'EMRGENCY' in str(picture).upper()):
             continue
-        picture_groups[pic].append(eid)
+        picture_groups[picture].append(elem)
 
     print(f"\nFound {len(picture_groups)} unique pictures.")
 
+    # For each picture, find unique feeders (same as old)
     picture_feeders = {}
-    for picture, elem_ids in picture_groups.items():
+    for picture, elems in picture_groups.items():
         feeders = {}
-        for eid in elem_ids:
-            if element_is_feeder.get(eid, False):
-                feeders[name_by_id[eid]] = eid
+        for elem in elems:
+            elem_id = elem.find('ID').text
+            element_ref = elem.find('ElementRef').text if elem.find('ElementRef') is not None else ""
+            if name_by_id.get(elem_id, "").startswith(feederPrefixes):  # is_feeder
+                parts = element_ref.split('.')
+                feeder_key = parts[1] if len(parts) > 1 else elem_id
+                feeders[feeder_key] = elem_id
         picture_feeders[picture] = feeders
         print(f"Picture: {picture} | Unique feeders: {len(feeders)}")
 
@@ -243,7 +261,7 @@ def run(xml_file, output_folder, use_scr_xml):
             return nm
         return None if nm.startswith(ignore_prefixes) else nm
 
-    # build quick connection index from consolidated sheet
+    # Consolidated sheet quick index (kept fast)
     con_index = defaultdict(lambda: defaultdict(set))  # picture -> element_name -> {connected_element_ids}
     if not alc_nodes_df.empty:
         for _, r in alc_nodes_df.iterrows():
@@ -258,55 +276,63 @@ def run(xml_file, output_folder, use_scr_xml):
                     cid, ename = item.split(">", 1)
                     con_index[pic][ename].add(cid)
 
+    # ---------- var finder (exact traversal style as old; cached) ----------
     @lru_cache(maxsize=None)
     def find_variable_stand_alone(element_id: str):
-        eref0 = element_ref_by_id.get(element_id, "")
-        var0 = variable_by_id.get(element_id, "-")
-        etype0 = type_by_id.get(element_id, None)
+        graph_element = elementid_to_graph_element.get(element_id)
+        if graph_element is None:
+            return None
+        element_ref = graph_element.find("ElementRef").text if graph_element.find("ElementRef") is not None else None
+        variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
+        element_type = graph_element.find("Type").text if graph_element.find("Type") is not None else None
+        parts_ = element_ref.split(".") if element_ref else ["", ""]
 
-        parts_ = eref0.split(".") if eref0 else []
         if len(parts_) > 1 and parts_[1].startswith(ignore_prefixes):
             return None
-        if len(parts_) > 1 and parts_[1].startswith(specialPrefixes) and var0 != "<No variable linked>":
-            return var0
+        if len(parts_) > 1 and parts_[1].startswith(specialPrefixes) and variable != "<No variable linked>":
+            return variable
 
-        if len(parts_) > 3 and etype0 in ("2","7"):
-            if parts_[2].startswith("INTEGRATION_PROJECT_ALC_ES") and parts_[3] == "DC" and var0 != "<No variable linked>":
-                return var0
-        if len(parts_) > 3 and etype0 in ("2","7"):
-            if parts_[2].startswith("ALC_LBS") and var0 != "<No variable linked>":
-                return var0
+        if len(parts_) > 3 and element_type in ["2", "7"]:
+            if parts_[2].startswith("INTEGRATION_PROJECT_ALC_ES") and parts_[3] == "DC" and variable != "<No variable linked>":
+                return variable
+        if len(parts_) > 3 and element_type in ["2", "7"]:
+            if parts_[2].startswith("ALC_LBS") and variable != "<No variable linked>":
+                return variable
 
         visited = set()
         stack = [element_id]
         counter = 0
         while stack:
-            if counter > 50_000:
+            if counter > 50000:
                 return None
             counter += 1
-            cur = stack.pop()
-            if cur in visited:
+            current_id = stack.pop()
+            if current_id in visited:
                 continue
-            visited.add(cur)
+            visited.add(current_id)
+            graph_element = elementid_to_graph_element.get(current_id)
+            if graph_element is None:
+                continue
+            element_ref = graph_element.find("ElementRef").text if graph_element.find("ElementRef") is not None else None
+            variable = graph_element.find("Variable").text if graph_element.find("Variable") is not None else "-"
+            element_type = graph_element.find("Type").text if graph_element.find("Type") is not None else None
+            parts = element_ref.split(".") if element_ref else ["", ""]
 
-            eref = element_ref_by_id.get(cur, "")
-            var = variable_by_id.get(cur, "-")
-            etype = type_by_id.get(cur, None)
-            parts = eref.split(".") if eref else []
+            if element_ref and len(parts) > 1 and len(parts_) > 1 and parts[1] == parts_[1]:
+                if parts[1].startswith(specialPrefixes) and variable != "<No variable linked>":
+                    return variable
+                if len(parts) > 3 and parts[2].startswith("ALC_LBS") and variable != "<No variable linked>":
+                    return variable
+                if element_type in ["2", "7"]:
+                    if variable != "<No variable linked>" and str(variable).endswith("OC_ST"):
+                        return variable
+            else:
+                continue
 
-            if eref and len(parts) > 1 and len(parts_) > 1 and parts[1] == parts_[1]:
-                if parts[1].startswith(specialPrefixes) and var != "<No variable linked>":
-                    return var
-                if len(parts) > 3 and parts[2].startswith("ALC_LBS") and var != "<No variable linked>":
-                    return var
-                if etype in ("2","7") and var != "<No variable linked>" and str(var).endswith("OC_ST"):
-                    return var
-
-            # expand via nodes
-            for nid in element_nodes_by_id.get(cur, ()):
-                for nb in node_to_elements.get(nid, ()):
-                    if nb != cur and nb not in visited:
-                        stack.append(nb)
+            # ORIGINAL neighbor expansion via Node1IDs/Node2IDs
+            next_node1_ids = [n.text for n in graph_element.findall(".//Node1IDs/ID")]
+            next_node2_ids = [n.text for n in graph_element.findall(".//Node2IDs/ID")]
+            stack.extend(next_node1_ids + next_node2_ids)
         return None
 
     # ---------- traversal state ----------
@@ -331,14 +357,17 @@ def run(xml_file, output_folder, use_scr_xml):
         def add_path_to_summary(picture_, feeder_key, path, nop_machine, end_reason, feeders_):
             path_names = []
             seen_names = set()
-            full_id_path = ' -> '.join(path)
+            Full_ID_Path_str = ' -> '.join(path)
+            path_all_machines = []
 
             for pid in path:
                 if pid in LINES_RESTRICTED:
                     break
+                path_all_machines.append(pid[:20])
                 nmf = name_filtered(pid)
                 if nmf is not None:
                     if (picture_, nmf) in NOP_MACHINES_RESTRICTED:
+                        print(f"    Path aborted: hits restricted NOP machine {nmf}") if nmf == "2L1T_1_3_1_3_NOP_Y1" else None
                         break
                     if nmf not in seen_names:
                         path_names.append(nmf)
@@ -359,6 +388,7 @@ def run(xml_file, output_folder, use_scr_xml):
                         path_names.remove(fn)
                 first_machine = path_names[1] if len(path_names) > 1 else '-'
                 last_machine = path_names[-1] if len(path_names) > 1 else '-'
+                feeder_key = path_names[0]
             elif len(set(feeder_names_in_path)) > 1:
                 return False
 
@@ -366,8 +396,8 @@ def run(xml_file, output_folder, use_scr_xml):
                 'Picture': picture_,
                 'Feeder': feeder_key,
                 'Path': ' -> '.join(path_names),
-                'Full_Path': ' -> '.join([p[:20] for p in path]),
-                'Full_ID_Path': full_id_path,
+                'Full_Path': ' -> '.join(path_all_machines),
+                'Full_ID_Path': Full_ID_Path_str,
                 'NOP_Machine': nop_machine,
                 'End_Reason': end_reason,
                 'First_Machine': first_machine,
@@ -386,37 +416,28 @@ def run(xml_file, output_folder, use_scr_xml):
                 print(f"  Skipping feeder '{feeder_key}' because it ends with _NOP")
                 continue
 
-            start_feeder_name = feeder_key
-
-            # neighbor lister (uses start_feeder_name)
-            def list_neighbors(elem_id: str):
-                out = set()
-                for nid in element_nodes_by_id.get(elem_id, ()):
-                    for nb in node_to_elements.get(nid, ()):
-                        if nb == elem_id:
-                            continue
-                        if element_is_feeder.get(nb, False) and name_by_id.get(nb) != start_feeder_name:
-                            continue
-                        out.add(nb)
-                return out
-
             visited_count = defaultdict(int)
-            queue = deque([(feeder_id, [feeder_id], 0)])  # (current_element, path_ids, path_counter)
+            # queue EXACT signature as old: (current, path, leg_context, current_path_count)
+            queue = deque([(feeder_id, [feeder_id], None, 0)])
             path_count = 0
             dequeues = 0
 
             while queue and path_count < 2_000_000:
-                current, path, current_path_count = queue.popleft()
+                current, path, leg_context, current_path_count = queue.popleft()
+                current_name = name_by_id.get(current, current)
                 dequeues += 1
                 if dequeues % PROGRESS_EVERY == 0:
                     print(f"    progress: {dequeues:,} dequeued, paths={path_count}, queue={len(queue):,}")
 
-                if visited_count[current] >= 10 or current in NOP_END_POINTS:
+                visit_key = (current, leg_context)
+                if visited_count[visit_key] >= 10 or current in NOP_END_POINTS:
                     continue
-                visited_count[current] += 1
+                if (picture, current_name) in NOP_MACHINES_RESTRICTED:
+                    print(f"    Path aborted: hits restricted NOP machine {current_name}") if current_name == "2L1T_1_3_1_3_NOP_Y1" else None
+                    continue
+                visited_count[visit_key] += 1
 
                 if current != feeder_id:
-                    current_name = name_by_id.get(current, current)
                     eref = element_ref_by_id.get(current, "")
                     variable = variable_by_id.get(current, "")
 
@@ -442,6 +463,7 @@ def run(xml_file, output_folder, use_scr_xml):
                         else:
                             # sheet override
                             if id_to_NOP_Variables.get((picture, current_name)) == "-":
+                                print(f"    Path aborted: NOP machine {current_name} explicitly disabled via sheet") if current_name == "2L1T_1_3_1_3_NOP_Y1" else None
                                 NOP_MACHINES_RESTRICTED.add((picture, current_name))
                                 if add_path_to_summary(picture, feeder_key, path, current_name, "NOP_Y_MATCH", feeders):
                                     path_count += 1
@@ -453,7 +475,6 @@ def run(xml_file, output_folder, use_scr_xml):
                             m = NOP_PATTERN_YT.search(eref.split(".")[1] if "." in eref else eref)
                             if m:
                                 nop_codes = re.findall(r'[YT]\d+', m.group(1))
-
                                 valid_code = []
                                 for code in nop_codes:
                                     if code.startswith('Y'):
@@ -461,8 +482,8 @@ def run(xml_file, output_folder, use_scr_xml):
                                             valid_code.append(code)
                                     else:
                                         q_code = f".Q{code[1:]}"
-                                        if (q_code in variable or
-                                            "TR_RIGHT" in variable or "TR_LEFT" in variable or "TR" in variable):
+                                        # accept TR/TR_LEFT/TR_RIGHT as in your fast version
+                                        if (q_code in variable or "TR_RIGHT" in variable or "TR_LEFT" in variable or "TR" in variable):
                                             valid_code.append(code)
 
                                 pass_flag = True
@@ -487,9 +508,10 @@ def run(xml_file, output_folder, use_scr_xml):
                                                     if vlist:
                                                         pass_flag = False
                                                         NOP_END_POINTS.add(id_on_path)
-                                                        for nb in list_neighbors(id_on_path):
-                                                            if name_by_id.get(nb, "").startswith("Line"):
-                                                                LINES_RESTRICTED.add(nb)
+                                                        # use EXACT same neighbor base as old when marking lines:
+                                                        for neighbor in connections.get(id_on_path, set()):
+                                                            if name_by_id.get(neighbor, "").startswith("Line"):
+                                                                LINES_RESTRICTED.add(neighbor)
                                                         path2 = [p for p in path if name_by_id.get(p, "") != current_name]
                                                         if add_path_to_summary(picture, feeder_key, path2, current_name, "NOP_Y_MATCH_2", feeders):
                                                             path_count += 1
@@ -509,18 +531,19 @@ def run(xml_file, output_folder, use_scr_xml):
                                     NOP_END_POINTS.add(current)
 
                                     if not is_multi_leg_machine(current):
-                                        for nid in element_nodes_by_id.get(current, ()):
-                                            for nb in node_to_elements.get(nid, ()):
-                                                if name_by_id.get(nb, "") == current_name:
-                                                    NOP_END_POINTS.add(nb)
-                                                    for nb2 in list_neighbors(nb):
-                                                        if name_by_id.get(nb2, "") == current_name:
-                                                            NOP_END_POINTS.add(nb2)
+                                        for neighbor in connections.get(current, set()):
+                                                NOP_END_POINTS.add(neighbor)
+                                                for neighbor2 in connections.get(neighbor, set()):
+                                                    # if name_by_id.get(neighbor2, "") == current_name:
+                                                    NOP_END_POINTS.add(neighbor2)
+                                                    for neighbor3 in connections.get(neighbor2, set()):
+                                                        NOP_END_POINTS.add(neighbor3)
                                         NOP_MACHINES_2LEG[(picture, current_name)] = (picture, current_name)
                                         continue
 
-                # neighbors
-                neighbors = [nb for nb in list_neighbors(current) if visited_count[nb] < 10]
+                # ---------- neighbors: EXACT as old ----------
+                all_neighbors = connections.get(current, set())
+                neighbors = [neighbor for neighbor in all_neighbors if visited_count[(neighbor, leg_context)] < 10]
                 if not neighbors and current != feeder_id:
                     current_name = name_by_id.get(current, current)
                     end_reason = f"DEAD_END_AT_{current_name[:30]}"
@@ -531,8 +554,8 @@ def run(xml_file, output_folder, use_scr_xml):
                             last_machines_list.append(nmf)
                     continue
 
-                for nb in neighbors:
-                    queue.append((nb, path + [nb], path_count))
+                for neighbor in neighbors:
+                    queue.append((neighbor, path + [neighbor], leg_context, path_count))
 
             if path_count == 0:
                 print("  No NOP end paths found from this feeder.")
@@ -579,7 +602,6 @@ def run(xml_file, output_folder, use_scr_xml):
     print("Assign Feeder Info to Machines Script (Per-Picture, Lean)")
     print("="*40)
 
-    # Ensure target columns exist (new ones)
     for c, default in [
         ("feeder_id","-"),
         ("first machine in feeder","-"),
@@ -657,7 +679,6 @@ def run(xml_file, output_folder, use_scr_xml):
 
             if set(valid_visuals) != set(visual_names):
                 machines.at[idx, 'Isolation Equipments Numbers'] = ','.join(valid_visuals)
-                # compact ISO vars (keep order, fill '-' to 14)
                 vals = [machines.at[idx, c] for c in iso_cols if machines.at[idx, c] != '-']
                 for i, c in enumerate(iso_cols):
                     machines.at[idx, c] = vals[i] if i < len(vals) else '-'
@@ -671,7 +692,6 @@ def run(xml_file, output_folder, use_scr_xml):
             if not loc_equip or feeder_id == '-' or loc_equip == '-':
                 continue
 
-            # build last_machines_set on demand
             pic_csv = per_picture_summary_path(picture)
             if os.path.exists(pic_csv):
                 tmp = pd.read_csv(pic_csv, usecols=['Last_Machine'], dtype=str)
@@ -692,9 +712,8 @@ def run(xml_file, output_folder, use_scr_xml):
                 for i, c in enumerate(con_cols):
                     machines.at[idx, c] = vals[i] if i < len(vals) else '-'
 
-    # ---------- final column order (exactly as requested) ----------
+    # ---------- final column order ----------
     final_order = base_cols + ["feeder_id", "first machine in feeder", "last machines in feeder", "Equipment Index"]
-    # ensure all are present
     for c in final_order:
         if c not in machines.columns:
             machines[c] = "-" if c != "Equipment Index" else 0
@@ -713,3 +732,16 @@ def run(xml_file, output_folder, use_scr_xml):
         idx_path = os.path.join(output_folder, "feeder_summary_index.csv")
         pd.DataFrame(summary_index).to_csv(idx_path, index=False)
         print(f"Wrote per-picture summary index: {idx_path}")
+
+
+
+
+
+
+
+
+
+
+
+
+
